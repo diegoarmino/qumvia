@@ -15,7 +15,7 @@ QUMVIA can be compilated in CPU version, which only permits the use of Gaussian 
 make cpu
 ```
 Available options:
-* _cpu_: Compiles QUMVIA version without Lio interface.
-* _lio_: Compiles the Lio-compatible version of the code.
+* _cpu_: compiles QUMVIA version without Lio interface.
+* _lio_: compiles the Lio-compatible version of the code.
 
 
