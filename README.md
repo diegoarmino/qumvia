@@ -23,7 +23,9 @@ TESTING
 
 From the qumvia root directory:
 
-cd test/h2co-roman
-bash runtest.bash
+```
+ cd test/h2co-roman
+ bash runtest.bash
+```
 
 Compare the final lines of test.oqv with correct-results.dat
