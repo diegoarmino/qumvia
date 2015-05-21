@@ -1,5 +1,5 @@
 # QUMVIA
-QUMVIA is a quantum mechanical software package for variational anharmonic vibrational calculations, that implements Vibrational self-consistent field (VSCF) and vibrational configuration interaction (VCI) vibrational structure methods. VSCF and VCI are analogous to HF and CI methods in electronic structure theory, although for solving the vibrational wavefunction instead of the electronic one. 
+Quantum Mechanical Vibrational Anlaysis, or QUMVIA for short, is a quantum mechanical software package for anharmonic vibrational calculations, that implements Vibrational self-consistent field (VSCF) and vibrational configuration interaction (VCI) methods. VSCF and VCI are analogous to HF and CI methods in electronic structure theory, although for solving the vibrational wavefunction instead of the electronic one. 
 The program needs an external software for building a potential energy surface (PES) in the quartic force field representation (QFF). QUMVIA is able to use Gaussian, Gamess and Lio for this.
 
 REQUIREMENTS
