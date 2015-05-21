@@ -18,4 +18,12 @@ Available options:
 * _cpu_: compiles QUMVIA version without Lio interface.
 * _lio_: compiles the Lio-compatible version of the code.
 
+TESTING
+-------
 
+From the qumvia root directory:
+
+cd test/h2co-roman
+bash runtest.bash
+
+Compare the final lines of test.oqv with correct-results.dat
