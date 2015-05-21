@@ -19,6 +19,8 @@ Available options:
 * _cpu_: compiles QUMVIA version without Lio interface.
 * _lio_: compiles the Lio-compatible version of the code.
 
+The compilation process creates an executable binary file inside the bin folder under the qumvia root directory, called qumvia.lio for the Lio-compatible version or a qumvia.cpu for the non-lio-compatible one. The final location of the qumvia executable should be added to the path environment variable.
+
 TESTING
 -------
 
