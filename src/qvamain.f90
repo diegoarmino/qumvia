@@ -49,6 +49,7 @@ program qumvia_main
    use qvamod_cpu
 #else
    use qvamod_lio
+   use qvamod_lioexcl
 #endif
    use qvamod_common
    use M_kracken
@@ -58,6 +59,12 @@ program qumvia_main
    integer   :: nqmatoms,ierr
    type(qva_cli_type), save  :: qva_cli
    type(qva_nml_type), save  :: qva_nml
+#ifdef qvalio
+   integer   :: nclatoms
+   integer, allocatable :: at_numbers(:)
+   real*8, allocatable :: qvageom(:,:)
+   type(lio_nml_type), save  :: lio_nml
+#endif
 
 !  PARSING COMMAND LINE ARGUMENTS
 !  The parsing (and only the parsing) is performed using M_kracken 
@@ -106,11 +113,36 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 !  READ NAMELIST AND FIRST LINE OF GEOMETRY FILE'
    call get_qva_nml(qva_cli%inp,qva_nml)
    call readnqmatoms(qva_cli%geo,nqmatoms)
+#ifdef qvalio
+!  Read geometry file.
+   allocate(at_numbers(nqmatoms),qvageom(3,nqmatoms))
+   call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
+   call get_lio_nml(qva_cli%inp,lio_nml)
+!   call print_lio_nml(lio_nml)
+
+   call init_lio_amber(nqmatoms,at_numbers,nclatoms, &
+      lio_nml%qmcharge, lio_nml%basis, lio_nml%output, lio_nml%fcoord, &
+      lio_nml%fmulliken, lio_nml%frestart, lio_nml%frestartin, &
+      lio_nml%verbose, lio_nml%OPEN, lio_nml%NMAX, lio_nml%NUNP, &
+      lio_nml%VCINP, lio_nml%GOLD, lio_nml%told, lio_nml%rmax, &
+      lio_nml%rmaxs, lio_nml%predcoef, lio_nml%idip, lio_nml%writexyz, &
+      lio_nml%intsoldouble, lio_nml%DIIS, lio_nml%ndiis, lio_nml%dgtrig, &
+      lio_nml%Iexch, lio_nml%integ, lio_nml%DENS, lio_nml%IGRID, &
+      lio_nml%IGRID2, lio_nml%timedep, lio_nml%tdstep, lio_nml%ntdstep, &
+      lio_nml%field, lio_nml%exter, lio_nml%a0, lio_nml%epsilon, &
+      lio_nml%Fx, lio_nml%Fy, lio_nml%Fz, lio_nml%NBCH, &
+      lio_nml%propagator, lio_nml%writedens, lio_nml%tdrestart)
+   deallocate(at_numbers,qvageom)
+#endif
+   close(unit=10)
 
    IF (qva_nml%nhess .eq. 1) THEN
 
 !     STATE-SPECIFIC VSCF / CONFIGURATION SELECTION VCI           
       call run_vscfvci(qva_cli,qva_nml,nqmatoms)
+#ifdef qvalio
+      call lio_finalize()
+#endif
       STOP
 
    ELSE IF (qva_nml%nhess .eq. 2) THEN

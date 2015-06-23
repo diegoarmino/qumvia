@@ -1,35 +1,30 @@
 # Fortran compilation
 
-HOME=/home/diegoa
+# The following 3 variables must be set in order to compile qumvia.
+#HOME=/home/armino
 #MKL_HOME=/opt/intel/composerxe/mkl
-MKL_HOME=/home/diegoa/intel/composer_xe_2013.0.079/mkl
-MKL=$(MKL_HOME)
-MKL_PROCESSOR=intel64
-BASEDIR=$(HOME)/dev/QUMVIA
-SRCDIR=$(BASEDIR)/src
+#LIO_HOME=$(HOME)/progs/lio
+
 BINDIR=../bin
 OBJDIR=../obj
 
 FC=ifort
 FFLAGS= -O3 -ip -xHost -FR -I${MKL_HOME}/include 
-#FFLAGS= -O3 -ipo -xHost -FR -I${MKL_HOME}/include 
-#FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lmkl_intel_thread -L$(MKL_HOME) 
 FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME) 
-
-LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(HOME)/progs/lio/g2g/ -lg2g -L$(HOME)/progs/lio/lioamber -llio-g2g
+LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(LIO_HOME)/g2g -lg2g -L$(LIO_HOME)/lioamber -llio-g2g
 
 cpu: clean mkdirs qumvia.cpu mvdirs
 
 lio: clean mkdirs qumvia.lio mvdirs
 
 mkdirs:
-	mkdir -p $(BINDIR)
-	mkdir -p $(OBJDIR)
+	if [ ! -d "$(BINDIR)" ]; then mkdir $(BINDIR); fi
+	if [ ! -d "$(OBJDIR)" ]; then mkdir $(OBJDIR); fi
 
 qumvia.cpu: M_kracken.o qvamod_common.o qvamod_cpu.o qvamain_cpu.o
 	$(FC) $(FFLAGS) -o $@ $^ $(FLIBS)
 
-qumvia.lio: M_kracken.o qvamod_common.o qvamod_lio.o qvamain_cpu.o
+qumvia.lio: M_kracken.o qvamod_common.o qvamod_lioexcl.o qvamod_lio.o qvamain_lio.o
 	$(FC) $(FFLAGS) -o $@ $^ $(FLIBS) $(LIOLIBS)
 
 #----------------------------------------------------------------------------------------
@@ -57,14 +52,13 @@ qvamain_cpu.o: qvamod_common.mod qvamod_cpu.mod qvamain.f90
 # LIO COMPILATION RULES
 #----------------------------------------------------------------------------------------
 qvamod_lioexcl.o: qvamod_common.mod qvamod_lioexcl.f90
-	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) $(LIOLIBS) \
-		-o qvamod_lioexcl.o
+	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) $(LIOLIBS) -o qvamod_lioexcl.o
 
-qvamod_lio.o: qvamod_common.mod qvamod_lioexcl.mod M_kracken.mod qvamod_alt.f90 
+qvamod_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_alt.f90 
 	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_alt.f90 $(FLIBS) $(LIOLIBS) \
 		-o qvamod_lio.o
 
-qvamain_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_lio.mod M_kracken.mod qvamain.f90 
+qvamain_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_lio.mod qvamain.f90 
 	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamain.f90 $(FLIBS) $(LIOLIBS) \
 		-o qvamain_lio.o
 
@@ -75,4 +69,4 @@ mvdirs:
 	mv qumvia.* $(BINDIR)
 
 clean:
-	rm -rf *.o *.mod $(OBJDIR) $(BINDIR)
+	rm -rf *.o *.mod qumvia.* 

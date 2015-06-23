@@ -34,17 +34,236 @@ module qvamod_lioexcl
 
    implicit none
    private
-   public :: run_vscfvci,selectqff,ssvscf_csvci2
+   public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml
+
+
+   type lio_nml_type
+      character(len=20) :: basis
+      character(len=20) :: output
+      character(len=20) :: fcoord
+      character(len=20) :: fmulliken
+      character(len=20) :: frestart
+      character(len=20) :: frestartin
+      logical :: verbose
+      logical :: OPEN
+      integer :: NMAX
+      integer :: NUNP
+      logical :: VCINP
+      real*8  :: GOLD
+      real*8  :: told
+      real*8  :: rmax
+      real*8  :: rmaxs
+      logical :: predcoef
+      integer :: idip
+      logical :: writexyz
+      logical :: intsoldouble
+      logical :: DIIS
+      integer :: ndiis
+      real*8  :: dgtrig
+      integer :: Iexch
+      logical :: integ
+      logical :: DENS
+      integer :: IGRID
+      integer :: IGRID2
+      integer :: timedep
+      real*8  :: tdstep
+      integer  :: ntdstep
+      logical :: field
+      logical :: exter
+      real*8  :: a0
+      real*8  :: epsilon
+      real*8  :: Fx
+      real*8  :: Fy
+      real*8  :: Fz
+      integer  :: NBCH
+      integer :: propagator
+      logical :: writedens
+      logical :: tdrestart
+      integer :: qmcharge
+   end type lio_nml_type
 
 
 contains
 
+!######################################################################
+!    LIO INITIALIZATION SECTION
+!######################################################################
 
+
+     subroutine get_lio_nml(qvain,lio_nml)
+        implicit none
+     
+        character(99),intent(in)        :: qvain
+        type(lio_nml_type), intent(out) :: lio_nml
+
+        character(len=20) :: basis
+        character(len=20) :: output
+        character(len=20) :: fcoord
+        character(len=20) :: fmulliken
+        character(len=20) :: frestart
+        character(len=20) :: frestartin
+        logical :: verbose
+        logical :: OPEN
+        integer :: NMAX
+        integer :: NUNP
+        logical :: VCINP
+        real*8  :: GOLD
+        real*8  :: told
+        real*8  :: rmax
+        real*8  :: rmaxs
+        logical :: predcoef
+        integer :: idip
+        logical :: writexyz
+        logical :: intsoldouble
+        logical :: DIIS
+        integer :: ndiis
+        real*8  :: dgtrig
+        integer :: Iexch
+        logical :: integ
+        logical :: DENS
+        integer :: IGRID
+        integer :: IGRID2
+        integer :: timedep
+        logical :: field
+        logical :: exter
+        real*8  :: tdstep
+        integer  :: ntdstep
+        real*8  :: a0
+        real*8  :: epsilon
+        real*8  :: Fx
+        real*8  :: Fy
+        real*8  :: Fz
+        integer  :: NBCH
+        integer :: propagator
+        logical :: writedens
+        logical :: tdrestart
+        integer :: qmcharge
+
+        namelist /lio/ basis,output,fcoord,fmulliken,frestart,frestartin &
+        ,verbose,OPEN,NMAX,Nunp,VCINP, &
+        GOLD,told,rmax,rmaxs,predcoef, &
+        idip,writexyz,intsoldouble,DIIS,ndiis,dgtrig, &
+        Iexch,integ,dens,igrid,igrid2,timedep, tdstep, ntdstep, &
+        propagator,NBCH, writedens, tdrestart, &
+        field,exter,a0,epsilon,Fx,Fy,Fz,qmcharge
+   
+        integer :: ifind, ierr
+        !defaults
+   
+        basis='basis'  ! name of the base file
+        output='output'
+        fcoord='qm.xyz'
+        fmulliken='mulliken'
+        frestart='restart.out'
+        frestartin='restart.in'
+        verbose=.false.
+        OPEN=.false.
+        NMAX= 100
+        NUNP= 0
+        VCINP= .false.
+        GOLD= 10.
+        told=1.0D-6
+        rmax=16
+        rmaxs=5
+        predcoef=.false.
+        idip=1
+        writexyz=.true.
+        intsoldouble=.true.
+        DIIS=.true.
+        ndiis=30
+        dgtrig=100.
+        Iexch=9
+        integ=.true.
+        DENS = .true.
+        IGRID = 2
+        IGRID2 = 2
+        timedep = 0
+        tdstep = 2.D-3
+        ntdstep= 1
+        field=.false.
+        exter=.false.
+        a0=1000.0
+        epsilon=1.D0
+        Fx=0.05
+        Fy=0.05
+        Fz=0.05
+        NBCH=10
+        propagator=1
+        writedens=.true.
+        tdrestart=.false.
+        qmcharge=0
+   
+        ! Read namelist
+!        open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
+!        if (ierr /= 0) then
+!           write(*,*) 'ERROR OPENING LIO NAMELIST'
+!           STOP
+!        end if
+
+        rewind 10
+        read(10,nml=lio,iostat=ierr)
+   
+        if ( ierr > 0 ) then
+           write(*,'(A)') 'LIO NAMELIST READ ERROR'
+        else if ( ierr < 0 ) then
+           write(*,'(A)') '&lio namelist read success'
+        end if
+
+        close(unit=10,iostat=ierr)
+        if (ierr /= 0) then
+           write(*,*) 'ERROR CLOSING LIO NAMELIST'
+           STOP
+        end if
+   
+   
+        lio_nml%basis=basis
+        lio_nml%output=output
+        lio_nml%fcoord=fcoord
+        lio_nml%fmulliken=fmulliken
+        lio_nml%frestart=frestart
+        lio_nml%frestartin=frestartin
+        lio_nml%verbose=verbose
+        lio_nml%OPEN=OPEN
+        lio_nml%NMAX=NMAX
+        lio_nml%NUNP=NUNP
+        lio_nml%VCINP=VCINP
+        lio_nml%GOLD=GOLD
+        lio_nml%told=told
+        lio_nml%rmax=rmax
+        lio_nml%rmaxs=rmaxs
+        lio_nml%predcoef=predcoef
+        lio_nml%idip=idip
+        lio_nml%writexyz=writexyz
+        lio_nml%intsoldouble=intsoldouble
+        lio_nml%DIIS=DIIS
+        lio_nml%ndiis=ndiis
+        lio_nml%dgtrig=dgtrig
+        lio_nml%Iexch=Iexch
+        lio_nml%integ=integ
+        lio_nml%DENS =DENS
+        lio_nml%IGRID =IGRID
+        lio_nml%IGRID2 =IGRID2
+        lio_nml%timedep =timedep
+        lio_nml%tdstep = tdstep
+        lio_nml%ntdstep = ntdstep
+        lio_nml%field=field
+        lio_nml%exter=exter
+        lio_nml%a0=a0
+        lio_nml%epsilon=epsilon
+        lio_nml%Fx=Fx
+        lio_nml%Fy=Fy
+        lio_nml%Fz=Fz
+        lio_nml%NBCH=NBCH
+        lio_nml%propagator=propagator
+        lio_nml%writedens=writedens
+        lio_nml%tdrestart=tdrestart
+        lio_nml%qmcharge=qmcharge
+     end subroutine get_lio_nml
+ 
 !######################################################################
 !    HESSIAN AND HARMONIC OSCILLATOR SECTION
 !######################################################################
 
- 
      subroutine projHessian(hess,qmcoords,at_numbers,ndf,nqmatoms,hessp)
      implicit none
 !    ------------------------------------------------------------------
@@ -419,6 +638,7 @@ contains
 !     write(77,'(18D14.4)') invsqrt_atomic_masses_au
 !     -------------------------------------------------------------------------
 !
+      write(*,'(A)') 'BEGINING HESSIAN CALCULATION'
       h=1D-3                           ! Step for numerical diferentiation.
       hessf=0.5D0/h                   ! 1/(2*h)
       ncoords=3*nqmatoms
@@ -432,9 +652,12 @@ contains
       sign_eig=1.0D00
       at_masses=0.0D0
 
+      write(*,'(A)') 'BEFORE CALLING LIO'
 !     Calculating energy and gradient at the initial geometry.
       call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+      write(*,'(A)') 'AFTER FIRST CALL TO LIO'
       call dft_get_qm_forces(dxyzqm)
+      write(*,'(A)') 'AFTER SECOND CALL TO LIO'
 !      call dft_get_mm_forces(dxyzcl,dxyzqm)
 
       do i=1,nqmatoms
@@ -461,6 +684,7 @@ contains
               end do
           end do
       end do
+      write(*,'(A)') 'JUST COMPUTED ALL GRADIENTS'
 
 
 !     Create a vector of inverse square-root masses corresponding to each 
