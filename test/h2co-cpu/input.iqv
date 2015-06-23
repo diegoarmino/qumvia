@@ -1,0 +1,19 @@
+!Formaldehyde VSCF/VCI calculation using Romanowski's QFF
+!J. Chem. Phys. 1985, 82, 4155.
+&qva
+  nhess = 1,
+  qva_dstep=1.0d0,
+  qumvia_qff=3,
+  vscf_gauswidth=1.0,
+  vci_qmax1=9,
+  vci_qmax2=9,
+  vci_qmax3=6,
+  vci_qmax4=6,
+  qumvia_nmc=3,
+  ethresh=16000,
+  resthresh=3000,
+  selcut1=0d0,
+  selcut2=0d0,
+  qva_naddref=4,
+  qva_extprog=2,
+&end/
