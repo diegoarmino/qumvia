@@ -1,0 +1,26 @@
+#PBS -S /bin/bash
+#PBS -l walltime=12:00:00
+#PBS -l nodes=1:ppn=1:gpus=1:m2090
+#PBS -N qvaliotest
+#PBS -o qvaliotest.out
+#PBS -m abe
+#PBS -M diegoarmino@gmail.com
+#PBS -q gpu
+#PBS -l pmem=4GB
+
+cd $PBS_O_WORKDIR
+module load intel openmpi cuda mkl gsl
+
+export LIOHOME=${HOME}/progs/lio
+export QVA_HOME=${HOME}/dev/qumvia
+export PATH="${PATH}:${QVA_HOME}/bin"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${AMBERHOME}/lib:$GARCHAHOME/g2g:$GARCHAHOME/lioamber:$LIOHOME/g2g:$LIOHOME/lioamber:/opt/intel/composer_xe_2013_sp1.0.080/compiler/lib/intel64"
+
+echo Host = `hostname`
+echo Date = `date`
+export PBS_GPUS=`gpus=; while read gpu ; do gpus="$gpus,$gpu"; done < $PBS_GPUFILE; echo $gpus | sed -e "s%^,%%"`
+
+MDEXE=$QVA_HOME/bin/qumvia.lio
+
+/usr/local/bin/pbsgpu-wrapper ${MDEXE} -i input.iqv -o test.oqv -c coordinates.cqv
+
