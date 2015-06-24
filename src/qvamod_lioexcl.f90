@@ -260,6 +260,17 @@ contains
         lio_nml%qmcharge=qmcharge
      end subroutine get_lio_nml
  
+     subroutine print_lio_nml(qva_nml)
+        implicit none
+        type(lio_nml_type), intent(in) :: lio_nml
+ 
+        write(77,'(A)') ' LIO NAMELIST PARAMETERS '
+        write(77,'(A)') ' ----------------------- '
+        write(77,nml=lio) 
+ 
+     end subroutine print_qva_nml
+
+
 !######################################################################
 !    HESSIAN AND HARMONIC OSCILLATOR SECTION
 !######################################################################

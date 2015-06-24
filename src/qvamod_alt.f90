@@ -226,8 +226,6 @@ contains
          write(77,'(A,I15)') 'NUMBER OF INITIAL CONFIGURATIONS: ',nconf
          if (nconf > 500000) nconf=500000
 !        Number of reference states to compute
-         write(*,'(A)') '***BEGINNING STATE-SPECIFIC VSCF/csVCI CALCULATION***'
-         write(77,'(A)') '***BEGINNING STATE-SPECIFIC VSCF/csVCI CALCULATION***'
          nrst=1+nvdf+naddref
 !        DANGER version 2 of the following subroutine
          call ssvscf_csvci2(qva_nml,qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
@@ -278,8 +276,6 @@ contains
       real*8, intent(out) :: uijjk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling
       real*8, intent(out) :: uijkk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling
 
-
-      write(*,*) 'BEGINNING QUARTIC FORCE FIELD COMPUTATION'
 
       select case (qumvia_qff)
          case (1)
@@ -433,7 +429,8 @@ contains
           call genConf3(0,0,0,0,hii,ethresh,nvdf,nvdf+1,trash,refstat)
        end if
        write(77,'(A)') 'REFERENCE CONFIGURATIONS'
-       do i=1,nrst+naddref
+!       do i=1,nrst+naddref
+       do i=1,nrst
           write(77,'(8I3)') refstat(:,i)
        end do
  
@@ -460,7 +457,7 @@ contains
           Poss(:,cnf)=Po(:,cnf,cnf)
  
  !        Computing VCI
-          write(77,'(A,8I3)') 'COMPUTING VCI FOR REFERENCE STATE ',ref
+!          write(77,'(A,8I3)') 'COMPUTING VCI FOR REFERENCE STATE ',ref
           bdim=qmaxx1+1
           call csVCI2(qva_nml,ref,qumvia_nmc,ethresh,resthresh,selcut1,selcut2,&
                     &Po,Q1,Q2,Q3,Hcore,GDmtrx,GTmtrx,Scho,Emod,&
@@ -469,8 +466,15 @@ contains
           Evci(cnf)=Eref*h2cm
        end do
  
+       write(77,*)
+       write(77,*)
+       write(77,'(A)') '#######################################################'
+       write(77,'(A)') 'FINAL RESULTS FINAL RESULTS FINAL RESULTS FINAL RESULTS'
+       write(77,'(A)') '#######################################################'
+       write(77,*)
        write(77,'(A)') 'ssVSCF AND csVCI ENERGIES AND TRANSITIONS (CM-1)'
        write(77,'(A)') 'No.       E(ssVSCF)      dE(ssVSCF)        E(csVCI)        dE(csVCI)'
+       write(77,*)
        do cnf=1,nrst
           write(77,'(I3,4F16.2)') cnf-1, Essvhf(cnf), Essvhf(cnf)-Essvhf(1),&
                                  & Evci(cnf),Evci(cnf)-Evci(1)

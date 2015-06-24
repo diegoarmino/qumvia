@@ -112,13 +112,14 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 
 !  READ NAMELIST AND FIRST LINE OF GEOMETRY FILE'
    call get_qva_nml(qva_cli%inp,qva_nml)
+   call print_qva_nml(qva_nml)
    call readnqmatoms(qva_cli%geo,nqmatoms)
 #ifdef qvalio
 !  Read geometry file.
    allocate(at_numbers(nqmatoms),qvageom(3,nqmatoms))
    call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
    call get_lio_nml(qva_cli%inp,lio_nml)
-!   call print_lio_nml(lio_nml)
+   call print_lio_nml(lio_nml)
 
    call init_lio_amber(nqmatoms,at_numbers,nclatoms, &
       lio_nml%qmcharge, lio_nml%basis, lio_nml%output, lio_nml%fcoord, &

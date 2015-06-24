@@ -34,7 +34,7 @@
     private
     public :: geoms4qff,get_qva_nml,readnqmatoms,qva_nml_type, &
            &  readgeom, readgaunmodes, readqff, readgamessqff, &
-           &  hseminumqff, readaddref, genconf3, &
+           &  hseminumqff, readaddref, genconf3, print_qva_nml,&
            &  ssvscf2, csVCI2,qva_cli_type
  
     type qva_nml_type
@@ -50,7 +50,7 @@
       integer :: qva_extprog
       integer :: doconfsel
       integer :: csdepth
-      integer :: csiterfactor
+      real*8  :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
       real*8  :: selcut1
@@ -89,7 +89,7 @@
           integer :: qva_extprog
           integer :: doconfsel
           integer :: csdepth
-          integer :: csiterfactor
+          real*8  :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
           real*8  :: selcut1
@@ -120,11 +120,10 @@
           qva_extprog=2
           doconfsel=1
           csdepth=2
-          csiterfactor=10
+          csiterfactor=10d0
        
        !  READ NAMELIST
        !  DANGER: Is it necessary to open file? I guess so.
-          write(*,*) 'OPENING INPUT FILE'
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
           if (ierr /= 0) then
              write(*,*) 'ERROR OPENNING INPUT FILE'
@@ -159,11 +158,35 @@
        end subroutine get_qva_nml
  
  
-       subroutine print_namelist(qva_nml)
-           implicit none
-           type(qva_nml_type), intent(in) :: qva_nml
+       subroutine print_qva_nml(qva_nml)
+          implicit none
+          type(qva_nml_type), intent(in) :: qva_nml
+
+          write(77,*) 
+          write(77,*) 
+          write(77,'(A)') ' QUMVIA NAMELIST PARAMETERS '
+          write(77,'(A)') ' -------------------------- '
+          write(77,'(A,I3)') '  nhess = ',qva_nml%nhess
+          write(77,'(A,I3)') '  vci_qmax1 = ',qva_nml%vci_qmax1
+          write(77,'(A,I3)') '  vci_qmax2 = ',qva_nml%vci_qmax2
+          write(77,'(A,I3)') '  vci_qmax3 = ',qva_nml%vci_qmax3
+          write(77,'(A,I3)') '  vci_qmax4 = ',qva_nml%vci_qmax4
+          write(77,'(A,I3)') '  qva_naddref = ',qva_nml%qva_naddref
+          write(77,'(A,I3)') '  qumvia_qff = ',qva_nml%qumvia_qff
+          write(77,'(A,I3)') '  qumvia_nmc = ',qva_nml%qumvia_nmc
+          write(77,'(A,I3)') '  qva_extprog = ',qva_nml%qva_extprog
+          write(77,'(A,I3)') '  doconfsel = ',qva_nml%doconfsel
+          write(77,'(A,I3)') '  csdepth = ',qva_nml%csdepth
+          write(77,'(A,F7.2)') '  csiterfactor = ',qva_nml%csiterfactor
+          write(77,'(A,F7.3)') '  vscf_gauswidth = ',qva_nml%vscf_gauswidth
+          write(77,'(A,F7.0)') '  ethresh = ',qva_nml%ethresh
+          write(77,'(A,F7.0)') '  resthresh = ',qva_nml%resthresh
+          write(77,'(A,D10.3)') '  selcut1 = ',qva_nml%selcut1
+          write(77,'(A,D10.3)') '  selcut2 = ',qva_nml%selcut2
+          write(77,'(A)') ' -------------------------- '
+          write(77,*) 
  
-       end subroutine print_namelist
+       end subroutine print_qva_nml
  
  !######################################################################
  !     READ NQMATOMS FROM GEOMETRY FILE
@@ -176,8 +199,7 @@
  !     READS THE NQMATOMS VARIABLE FROM GEOMETRY INPUT FILE 
  !     -----------------------------------------------------------
        character(99),intent(in)   :: qvageom
-       integer,intent(out)        :: nqmatoms
- !     Local variables
+       integer,intent(out)        :: nqmatoms !     Local variables
        integer   :: openstatus
        integer   :: closestatus
  !     -----------------------------------------------------------
@@ -190,7 +212,6 @@
  
  !     READING GEOMETRY FROM FILE
        READ(15,*) nqmatoms
-       write(77,'(A,I3)') 'nqmatoms=',nqmatoms
  
        close(15,iostat=closestatus)
        if (closestatus/=0) then
@@ -254,7 +275,6 @@
           qvageom(1,n)=x
           qvageom(2,n)=y
           qvageom(3,n)=z
-          write(77,'(A,I3)') 'READING LINE ',n
        END DO
  
        close(15,iostat=closestatus)
@@ -265,9 +285,12 @@
  
  !     PRINT THE GEOMETRY JUST READ
        write(77,'(A)') 'INPUT GEOMETRY'
+       write(77,'(A)') '-----------------------------------------------------------------'
        do i=1,nqmatoms
-          write(77,'(I6,3D18.11)') at(i),qvageom(:,i)
+          write(77,'(I5,3D20.11)') at(i),qvageom(:,i)
        end do
+       write(77,'(A)') '-----------------------------------------------------------------'
+       write(77,*)
  
        end subroutine
  
@@ -687,6 +710,7 @@
           end do
        end do   
  
+       write(77,*)
        write(77,'(A)') '##############################################'
        write(77,'(A)') '   FINISHED WITH QUARTIC FORCE FIELD COMP     '
        write(77,'(A)') '##############################################'
@@ -1072,9 +1096,10 @@
           end do
        end do
  
-       write(*,*) '----------------------------------------------'
-       write(*,*) '   FINISHED WITH QUARTIC FORCE FIELD COMP     '
-       write(*,*) '----------------------------------------------'
+       write(77,*)
+       write(77,*) '----------------------------------------------'
+       write(77,*) '   FINISHED WITH QUARTIC FORCE FIELD COMP     '
+       write(77,*) '----------------------------------------------'
        write(77,'(A)') '             QFF PARAMETERS'
        write(77,'(A)') '----------------------------------------------'
        write(77,'(A)') '                DIAGONAL'
@@ -2795,8 +2820,9 @@
           end if
        end do
  
+       write(77,*)
        write(77,'(A,8I3)') 'INITIAL GUESS ENERGY FOR REFERENCE STATE',ref
-       write(77,'(F14.6)') Evscf*hartree2cm
+       write(77,'(F16.2)') Evscf*hartree2cm
  
  
  !     -----------------------------------------------------------------
@@ -2805,8 +2831,9 @@
  !     BEGINING VSCF ITERATIONS
  
        iter=1
-       write(77,'(A)') 'ITER     Evscf   MP1 CORRECTION'
-       write(77,'(A)') '----------------------------------'
+       write(77,*)
+       write(77,'(A)') 'ITER     Evscf   MP1 CORRECTIONS'
+       write(77,'(A)') '----------------------------------------------'
        DO ! Begin infinite loop.
  
  !        Build effective potential matrix G
@@ -2857,9 +2884,9 @@
           if (Abs(Evscf_old-Evscf) < 1.0D-9) EXIT
        END DO
  
-       write(77,'(A)')      '------------------------------------'
+       write(77,'(A)') '----------------------------------------------'
        write(77,'(A,I3,A)') 'VSCF CONVERGED IN ',iter-1,' ITERATIONS'
-       write(77,'(A)')      '------------------------------------'
+       write(77,*)
  
        Evscf=Evscf*hartree2cm
        write(77,'(A)')      '------------------------------------'
@@ -4499,12 +4526,15 @@
           STOP
        end if 
  
+       write(77,*)
        write(77,'(A)') '----------------------------------------------'
        write(77,'(A)') ' ADDITIONAL REFERENCE CONFIGURATIONS READ     '
        write(77,'(A)') '----------------------------------------------'
        do i=1,naddref
           write(77,'(8I3)') (addrefs(j,i),j=1,8)
        end do
+       write(77,'(A)') '----------------------------------------------'
+       write(77,*)
  
        end subroutine
  
@@ -4774,10 +4804,6 @@
           zpe=zpe+hof(i)/2d0
        end do
        ecut=zpe+ethresh+5000d0
-       write(77,'(A)') 'HARMONIC OSCILLATOR TRANSITIONS'
-       write(77,'(99F16.8)') hof
-       write(77,'(A)') 'zpe         ethresh         ecut'
-       write(77,'(99F16.2)') zpe, ethresh, ecut
  
  !     Total number of configurations
  !     nconf = 1 + nvdf*qmaxx1 + nvdf*(nvdf-1)*qmaxx2*qmaxx2/2 +
@@ -5886,7 +5912,7 @@
        integer :: err
        integer :: ml(1)
        integer :: conf(8)
-       integer :: csifac
+       real*8  :: csifac
        real*8  :: Qm1(bdim,bdim,nvdf)
        real*8  :: Qm2(bdim,bdim,nvdf)
        real*8  :: Qm3(bdim,bdim,nvdf)
@@ -5925,10 +5951,21 @@
        doconfsel=qva_nml%doconfsel
        nmods=qmaxx1+1 ! Dimension of CI operator matrices.
  
-       write(77,'(A)') '--------------'
-       write(77,'(A)') 'STARTING csVCI'
-       write(77,'(A)') '--------------'
- 
+       if (doconfsel == 1) then
+          write(77,*)
+          write(77,'(A)') '--------------'
+          write(77,'(A)') 'STARTING csVCI'
+          write(77,'(A)') '--------------'
+       else 
+          write(77,*)
+          write(77,'(A)') '--------------'
+          write(77,'(A)') 'STARTING VCI'
+          write(77,'(A)') '--------------'
+       end if
+       write(77,*)
+       write(77,'(A,8I3)') 'COMPUTING VCI FOR REFERENCE STATE ',ref
+
+        
  !     CHANGE OF BASIS FROM GAUSSIAN TO VSCF MODALS FOR Q AND Hcore OPERATORS.
  !     -----------------------------------------------------------------
        call build_CIop3(Po,Q1,Q2,Q3,Hcore,GDmtrx,GTmtrx,Scho,ngaus,nvdf,nmods,&
@@ -5945,15 +5982,21 @@
  !        -----------------------------------------------------------------
           nsc=1
           configs=0
+          write(77,*)
+          write(77,'(A)') 'STARTING RECURSIVE CONFIGURATION SELECTION  '
+          write(77,'(A)') '------------------------------------------------------------'
           do i=1,csdepth
              if (i==1) cut=selcut1
              if (i>1) cut=csifac*cut
+             write(77,'(A,I2,A,D10.3)') 'CUTOFF FOR ITERATION ',i,' = ',cut
              call confsel(qmaxx1,qmaxx2,qmaxx3,qmaxx4,nvdf,nconf,configs,ngaus,&
                   & nmods,qumvia_nmc,ref,nsc,cut,diag,ethresh,Emod,&
                   & Qm1,Qm2,Qm3,Hmc,GDm,GTm,hii,tiij,tjji,uiiij,ujjji,uiijj,&
                   & tijk,uiijk,uijjk,uijkk)
           end do
+          write(77,'(A)') '------------------------------------------------------------'
           write(77,'(A,I15)') 'Configs after RECURSIVE CS =',nsc
+          write(77,*)
     
        ELSE
 
@@ -6175,7 +6218,7 @@
        do i=1,nvdf
           zpe=zpe+hof(i)/2d0
        end do
-       write(77,'(A,D15.5)') 'ZERO POINT ENERGY = ',zpe
+!       write(77,'(A,D15.5)') 'ZERO POINT ENERGY = ',zpe
  
  !     -----------------------------------------------------------------
  !     VSCF REFERENCE STATE
@@ -6198,7 +6241,7 @@
           call calcHOE(conf,nvdf,zpe,hof,Erefho)
           ecut=Erefho+ethresh
        end if
-       write(77,'(A,D15.6)') 'ENERGY CUTOFF FOR CS IS ',ecut
+!       write(77,'(A,D15.6)') 'ENERGY CUTOFF FOR CS IS ',ecut
  
  !     GROUND STATE
  !     -----------------------------------------------------------------
