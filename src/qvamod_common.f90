@@ -5919,7 +5919,7 @@
  !     CONFIGURATION SELECTION
  !     -----------------------------------------------------------------
        allocate(configs(8,nconf),diag(nconf),stat=err)
-       if (err /= 0) STOP ('ALLOCATION ERROR: Line 8095')
+       if (err /= 0) STOP ('ALLOCATION ERROR: Configuration selection')
  
        nsc=1
        csdepth=2
@@ -5992,7 +5992,7 @@
        allocate (Evhf(nsc))
        Evhf=diag
        deallocate(diag,stat=err)
-       if (err/=0) STOP('DEALLOCATION ERROR: diag/line 8147')
+       if (err/=0) STOP('DEALLOCATION ERROR: Building diag hamiltonian')
  
  
  !     BUILDING OFF-DIAGONAL HAMILTONIAN 
