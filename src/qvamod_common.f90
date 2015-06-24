@@ -6042,7 +6042,7 @@
        allocate (Evhf(nsc))
        Evhf=diag
        deallocate(diag,stat=err)
-       if (err/=0) STOP('DEALLOCATION ERROR: diag/line 8147')
+       if (err/=0) STOP('DEALLOCATION ERROR: Building diag hamiltonian')
  
  
  !     BUILDING OFF-DIAGONAL HAMILTONIAN 
