@@ -28,3 +28,6 @@
 *.app
 qumvia.lio
 qumvia.cpu
+
+# Others
+compile_qva.bash
