@@ -230,7 +230,7 @@ contains
          write(77,'(A)') '***BEGINNING STATE-SPECIFIC VSCF/csVCI CALCULATION***'
          nrst=1+nvdf+naddref
 !        DANGER version 2 of the following subroutine
-         call ssvscf_csvci2(qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
+         call ssvscf_csvci2(qva_nml,qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
                          &selcut2,ndf,nvdf,ngaus,nmcoup,nqmatoms,nclatoms,&
                          &qmaxx1,qmaxx2,qmaxx3,qmaxx4,nconf,at_numbers,dy,gwidth,&
                          &eig,nmodes,qvageom,clcoords,naddref,nrst)
@@ -326,7 +326,7 @@ contains
 
 
 
-       subroutine ssvscf_csvci2(qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
+       subroutine ssvscf_csvci2(qva_nml,qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
                           &selcut2,ndf,nvdf,ngaus,nmcoup,nqmatoms,nclatoms,&
                           &qmaxx1,qmaxx2,qmaxx3,qmaxx4,nconf,at_numbers,dy,gwidth,&
                           &eig,nmodes,qmcoords,clcoords,naddref,nrst)
@@ -343,6 +343,7 @@ contains
        implicit none
  
        type(qva_cli_type), intent(in) :: qva_cli
+       type(qva_nml_type), intent(in) :: qva_nml
        integer,intent(in)  :: nrst
        integer,intent(in)  :: qumvia_nmc           ! # of coupled mode in Hci
        integer,intent(in)  :: qumvia_qff           ! # keyword for qff read/calc
@@ -461,7 +462,7 @@ contains
  !        Computing VCI
           write(77,'(A,8I3)') 'COMPUTING VCI FOR REFERENCE STATE ',ref
           bdim=qmaxx1+1
-          call csVCI2(ref,qumvia_nmc,ethresh,resthresh,selcut1,selcut2,&
+          call csVCI2(qva_nml,ref,qumvia_nmc,ethresh,resthresh,selcut1,selcut2,&
                     &Po,Q1,Q2,Q3,Hcore,GDmtrx,GTmtrx,Scho,Emod,&
                     &hii,tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
                     &nconf,ngaus,nvdf,qmaxx1,qmaxx2,qmaxx3,qmaxx4,bdim,Eref)

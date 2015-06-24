@@ -48,6 +48,9 @@
       integer :: qumvia_qff
       integer :: qumvia_nmc
       integer :: qva_extprog
+      integer :: doconfsel
+      integer :: csdepth
+      integer :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
       real*8  :: selcut1
@@ -84,13 +87,16 @@
           integer :: qumvia_qff
           integer :: qumvia_nmc
           integer :: qva_extprog
+          integer :: doconfsel
+          integer :: csdepth
+          integer :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
           real*8  :: selcut1
           real*8  :: selcut2
           real*8  :: qva_dstep
        
-          namelist /qva/ nhess,vscf_gauswidth, &
+          namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog
        
@@ -112,6 +118,9 @@
           selcut2=1d-6
           qva_dstep=0.5d0
           qva_extprog=2
+          doconfsel=1
+          csdepth=2
+          csiterfactor=10
        
        !  READ NAMELIST
        !  DANGER: Is it necessary to open file? I guess so.
@@ -143,6 +152,9 @@
           qva_nml%selcut1=selcut1
           qva_nml%selcut2=selcut2
           qva_nml%qva_dstep=qva_dstep
+          qva_nml%doconfsel=doconfsel
+          qva_nml%csdepth=csdepth
+          qva_nml%csiterfactor=csiterfactor
        
        end subroutine get_qva_nml
  
@@ -5807,7 +5819,7 @@
  !#######################################################################
  
  
-       subroutine csVCI2(ref,qumvia_nmc,ethresh,resthresh,selcut1,selcut2,&
+       subroutine csVCI2(qva_nml,ref,qumvia_nmc,ethresh,resthresh,selcut1,selcut2,&
                     &Po,Q1,Q2,Q3,Hcore,GDmtrx,GTmtrx,Scho,Emod,&
                     &hii,tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
                     &nconf,ngaus,nvdf,qmaxx1,qmaxx2,qmaxx3,qmaxx4,bdim,Eref)
@@ -5824,6 +5836,7 @@
  !     -----------------------------------------------------------------
        implicit none
  
+       type(qva_nml_type), intent(in) :: qva_nml
        integer,intent(in)  :: qumvia_nmc ! Number of coupled modes.
        integer,intent(in)  :: ref(8) ! Reference configuration.
        integer,intent(in)  :: ngaus ! Dimension of DGBS
@@ -5859,6 +5872,7 @@
        real*8,intent(in)   :: selcut2
        real*8,intent(out)  :: Eref
  
+       integer :: doconfsel
        integer :: csdepth ! Number of CS itterations.
        integer :: stopcnf ! Number of selected confs in prev round.
        integer :: i,j
@@ -5871,6 +5885,8 @@
        integer :: cnf
        integer :: err
        integer :: ml(1)
+       integer :: conf(8)
+       integer :: csifac
        real*8  :: Qm1(bdim,bdim,nvdf)
        real*8  :: Qm2(bdim,bdim,nvdf)
        real*8  :: Qm3(bdim,bdim,nvdf)
@@ -5879,6 +5895,7 @@
        real*8  :: GTm(bdim,bdim,nvdf)
        real*8  :: tol
        real*8  :: cut
+       real*8  :: Ediag
  
  !     Alocatable variables.
        real*8,dimension(:),allocatable   :: Hci
@@ -5903,6 +5920,9 @@
        real*8,external  :: dlamch
        real*8, parameter :: h2cm = 219474.63d0 ! cm-1/Ha
  !     -----------------------------------------------------------------
+       csdepth=qva_nml%csdepth
+       csifac=qva_nml%csiterfactor
+       doconfsel=qva_nml%doconfsel
        nmods=qmaxx1+1 ! Dimension of CI operator matrices.
  
        write(77,'(A)') '--------------'
@@ -5916,34 +5936,53 @@
        write(77,'(A)') 'FINNISHED VCI OPERATORS   '
  
  
- !     CONFIGURATION SELECTION
- !     -----------------------------------------------------------------
        allocate(configs(8,nconf),diag(nconf),stat=err)
-       if (err /= 0) STOP ('ALLOCATION ERROR: Line 8095')
+       if (err /= 0) STOP ('ALLOCATION ERROR: Configuration selection')
  
-       nsc=1
-       csdepth=2
-       configs=0
-       do i=1,csdepth
-          if (i==1) cut=selcut1
-          if (i==2) cut=5*selcut1
-          call confsel(qmaxx1,qmaxx2,qmaxx3,qmaxx4,nvdf,nconf,configs,ngaus,&
-               & nmods,qumvia_nmc,ref,nsc,cut,diag,ethresh,Emod,&
-               & Qm1,Qm2,Qm3,Hmc,GDm,GTm,hii,tiij,tjji,uiiij,ujjji,uiijj,&
-               & tijk,uiijk,uijjk,uijkk)
-       end do
-       write(77,'(A,I15)') 'Configs after RECURSIVE CS =',nsc
- 
- 
- 
- !     REDUCING SIZE OF ARRAYS
- !     -----------------------------------------------------------------
+       IF (doconfsel == 1) THEN
+
+ !        CONFIGURATION SELECTION
+ !        -----------------------------------------------------------------
+          nsc=1
+          configs=0
+          do i=1,csdepth
+             if (i==1) cut=selcut1
+             if (i>1) cut=csifac*cut
+             call confsel(qmaxx1,qmaxx2,qmaxx3,qmaxx4,nvdf,nconf,configs,ngaus,&
+                  & nmods,qumvia_nmc,ref,nsc,cut,diag,ethresh,Emod,&
+                  & Qm1,Qm2,Qm3,Hmc,GDm,GTm,hii,tiij,tjji,uiiij,ujjji,uiijj,&
+                  & tijk,uiijk,uijjk,uijkk)
+          end do
+          write(77,'(A,I15)') 'Configs after RECURSIVE CS =',nsc
+    
+       ELSE
+
+!         NO CONFIGURATION SELECTION
+!         -----------------------------------------------------------------
+          configs=0
+          diag=0d0
+          call genConf3(qmaxx1,qmaxx2,qmaxx3,qmaxx4,hii,ethresh,nvdf,nconf,nsc,configs)
+          write(77,'(A,I15)') 'Configs after energy threshold =',nsc
+          do i=1,nsc
+             conf = configs(:,i)
+             if ( equal(ref,conf) ) nref=i
+             call diagCIme(conf,qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,&
+                   &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                   &nvdf,ngaus,nmods,nconf,Ediag)
+             diag(i) = Ediag
+          end do
+
+       END IF
+    
+    
+!      REDUCING SIZE OF ARRAYS
+!      -----------------------------------------------------------------
        allocate(sconfigs(8,nsc),sdiag(nsc),stat=err)
        if (err /= 0) STOP ('ALLOCATION ERROR: sconfigs')
- 
+   
        sconfigs = configs(:,1:nsc)
        sdiag = diag(1:nsc)
- 
+  
        if (allocated(configs)) deallocate(configs,diag,stat=err)
        if (err /= 0) STOP ('DEALLOCATION ERROR: configs,diag')
        allocate(configs(8,nsc),diag(nsc),stat=err)
@@ -5955,10 +5994,6 @@
        if (allocated(sconfigs)) deallocate(sconfigs,sdiag,stat=err)
        if (err/=0) STOP('ALLOCATION ERROR: deallocating sconfigs/sdiag')
        
- !      write(77,'(A)') 'UNSORTED CONFIGS'
- !      do i=1,nsc
- !         write(77,'(8I3,D15.6)') configs(:,i),diag(i)
- !      end do
  
  !     SORTING BY DIAGONAL ENERGY
  !     -----------------------------------------------------------------
@@ -5967,12 +6002,27 @@
        sort=0
        call quick_sort(diag,sort,nsc)
        configs = configs(:,sort)
-       do i=1,nsc
-          if (sort(i)==1) then
-             nref=i
-             exit
-          end if
-       end do
+
+       IF (doconfsel==1) THEN
+
+          do i=1,nsc
+             if (sort(i)==1) then
+                nref=i
+                exit
+             end if
+          end do
+
+       ELSE
+
+          do i=1,nsc
+             if (sort(i)==nref) then
+                nref=i
+                exit
+             end if
+          end do
+
+       END IF
+
  !      write(77,'(A)') 'SORT'
  !      write(77,'(99999I4)') sort
  
@@ -6045,7 +6095,6 @@
        deallocate ( WORK,IWORK,IFAIL,Eci,Cci,Evhf,Hci )
  
        end subroutine
- 
  
  
  
@@ -6426,7 +6475,6 @@
        integer :: sref
        integer :: n1,n2,n3 ! Various indices.
        integer :: psi(nvdf) ! VSCF wavefunction. Array of vib. quantum numbers.
-       integer :: sort(nconf)
        real*8 :: Vc2       ! Auxiliary variable for Hci calculation.
        real*8 :: Vc3       ! Auxiliary variable for Hci calculation.
        real*8 :: ehf       ! Auxiliary variable for Hci calculation.
