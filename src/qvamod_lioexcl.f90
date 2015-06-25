@@ -34,7 +34,8 @@ module qvamod_lioexcl
 
    implicit none
    private
-   public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml
+   public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml,&
+           & print_lio_nml
 
 
    type lio_nml_type
@@ -260,15 +261,49 @@ contains
         lio_nml%qmcharge=qmcharge
      end subroutine get_lio_nml
  
-     subroutine print_lio_nml(qva_nml)
+     subroutine print_lio_nml(lio_nml)
         implicit none
         type(lio_nml_type), intent(in) :: lio_nml
  
         write(77,'(A)') ' LIO NAMELIST PARAMETERS '
         write(77,'(A)') ' ----------------------- '
-        write(77,nml=lio) 
- 
-     end subroutine print_qva_nml
+        write(77,*)      '  OPEN ', lio_nml%OPEN
+        write(77,*)     '  NMAX ', lio_nml%NMAX
+        write(77,*)     '  NUNP ', lio_nml%NUNP
+        write(77,*)     '  VCINP ', lio_nml%VCINP
+!       write(77,*)     '  GOLD ', GOLD
+        write(77,*)     '  told ', lio_nml%told
+!       write(77,*)     '  rmax ', rmax
+!       write(77,*)     '  rmaxs ', rmaxs
+!       write(77,*)     '  predcoef ', predcoef
+!       write(77,*)     '  idip ', idip
+        write(77,*)     '  writexyz ', lio_nml%writexyz
+        write(77,*)     '  DIIS ', lio_nml%DIIS
+        write(77,*)     '  ndiis ', lio_nml%ndiis
+        write(77,*)     '  Iexch ', lio_nml%Iexch
+!       write(77,*)     '  integ ', integ
+!       write(77,*)     '  DENS ' ,  DENS
+        write(77,*)     '  IGRID ', lio_nml%IGRID
+        write(77,*)     '  IGRID2 ', lio_nml%IGRID2
+        write(77,*)     '  timedep ', lio_nml%timedep
+        if(lio_nml%timedep.gt.0) then
+           write(77,*)     'Runing TDDFT calculation with Lio'
+           write(77,*)     '  tdstep ', lio_nml%tdstep
+           write(77,*)     '  ntdstep ', lio_nml%ntdstep
+           write(77,*)     '  field ', lio_nml%field
+           write(77,*)     '  exter ', lio_nml%exter
+           write(77,*)     '  a0 ', lio_nml%a0
+           write(77,*)     '  epsilon ', lio_nml%epsilon
+           write(77,*)     '  Fx ', lio_nml%Fx
+           write(77,*)     '  Fy ', lio_nml%Fy
+           write(77,*)     '  Fz ', lio_nml%Fz
+           write(77,*)     '  NBCH ', lio_nml%NBCH
+           write(77,*)     '  propagator ', lio_nml%propagator
+           write(77,*)     '  writedens ', lio_nml%writedens
+           write(77,*)     '  writedens ', lio_nml%tdrestart
+        endif
+      
+     end subroutine print_lio_nml
 
 
 !######################################################################
@@ -669,7 +704,7 @@ contains
       write(*,'(A)') 'AFTER FIRST CALL TO LIO'
       call dft_get_qm_forces(dxyzqm)
       write(*,'(A)') 'AFTER SECOND CALL TO LIO'
-!      call dft_get_mm_forces(dxyzcl,dxyzqm)
+      call dft_get_mm_forces(dxyzcl,dxyzqm)
 
       do i=1,nqmatoms
           do j=1,3
@@ -687,7 +722,7 @@ contains
               qmxyz(j,i)=qmxyz(j,i)+h
               call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
               call dft_get_qm_forces(dxyzqm)
-!              call dft_get_mm_forces(dxyzcl,dxyzqm)
+              call dft_get_mm_forces(dxyzcl,dxyzqm)
               do r=1,nqmatoms
                do s=1,3
                  grad(k,3*(r-1)+s)=dxyzqm(s,r)
