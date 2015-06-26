@@ -343,7 +343,7 @@
        include "qvmbia_param.f"
  
  !     Read geometry file.
-       call readgeom(qva_cli,nat,qvageom,at_numbers)
+       call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
  
  !     Some aliases
        qumvia_nmc = qva_nml%qumvia_nmc
