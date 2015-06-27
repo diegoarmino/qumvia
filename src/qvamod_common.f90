@@ -271,7 +271,8 @@
        qvageom=0d0
  
        DO n=1,nqmatoms
-          READ(15,'(I3,3F15.10)') at(n),x,y,z
+!          READ(15,'(I3,3F15.10)') at(n),x,y,z
+          READ(15,*) at(n),x,y,z
           qvageom(1,n)=x
           qvageom(2,n)=y
           qvageom(3,n)=z
@@ -370,14 +371,14 @@
  !     -----------------------------------------------------------------
  !     DEBUG
  !     -----------------------------------------------------------------
-       write(77,'(A)') 'NORMAL MODES: Output from readgamnmodes'
-       do i=1,ndf
-          write(77,'(99F15.10)') L(i,:)
-       end do
-       write(77,'(A)') 'FORCE CONSTANTS: Output from readgamnmodes'
-       do i=1,nvdf
-          write(77,'(F15.10)') hii(i)
-       end do
+!       write(77,'(A)') 'NORMAL MODES: Output from readgamnmodes'
+!       do i=1,ndf
+!          write(77,'(99F15.10)') L(i,:)
+!       end do
+!       write(77,'(A)') 'FORCE CONSTANTS: Output from readgamnmodes'
+!       do i=1,nvdf
+!          write(77,'(F15.10)') hii(i)
+!       end do
  !     -----------------------------------------------------------------
  
  !     We define the step size acording to J.Chem.Phys 121:1383
@@ -402,8 +403,8 @@
        omega = Sqrt(hii)
        dQ = dy/Sqrt(omega)
  
-       write(77,'(A)')'SCALE FACTOR FOR DISPLACEMENTS'
-       write(77,'(99F15.10)') dQ
+!       write(77,'(A)')'SCALE FACTOR FOR DISPLACEMENTS'
+!       write(77,'(99F15.10)') dQ
  
  
  !     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
@@ -414,10 +415,10 @@
           end do
        end do
  
-       write(77,'(A)')'MASS MATRICES'
-       write(77,'(99F15.10)') Mass
-       write(77,*) 
-       write(77,'(99F15.10)') Minv
+!       write(77,'(A)')'MASS MATRICES'
+!       write(77,'(99F15.10)') Mass
+!       write(77,*) 
+!       write(77,'(99F15.10)') Minv
  !-----------------------------------------------------------------------
  !     GENERATING STENCIL GEOMETRIES
  !-----------------------------------------------------------------------
@@ -591,7 +592,7 @@
        omega = Sqrt(hii)
        dQ = dy/Sqrt(omega)
  
-       write(77,'(A,99D14.6)') 'dQ(nm) = ',dQ
+!       write(77,'(A,99D14.6)') 'dQ(nm) = ',dQ
  
  !     READ, MASS-WEIGHT AND CONVERT TO NORMAL COORDINATES  HESSIANS 
  !     AT DISTORTED GEOMETRIES 
@@ -928,10 +929,10 @@
                 end do
              end do
  
-             write(77,'(2I2)') nm,dsp
-             do i=1,ndf
-                write(77,'(99D15.8)') (thess(i,j),j=1,ndf)
-             end do
+!             write(77,'(2I2)') nm,dsp
+!             do i=1,ndf
+!                write(77,'(99D15.8)') (thess(i,j),j=1,ndf)
+!             end do
  
  !           MASS-WEIGHTING HESSIAN MATRIX
              do i=1,ndf
@@ -941,11 +942,11 @@
                 end do
              end do
  
-             write(77,'(A)') 'MASS WEIGHTED HESSIAN'
-             write(77,'(2I2)') nm,dsp
-             do i=1,ndf
-                write(77,'(99D15.8)') (thess(i,j),j=1,ndf)
-             end do
+!             write(77,'(A)') 'MASS WEIGHTED HESSIAN'
+!             write(77,'(2I2)') nm,dsp
+!             do i=1,ndf
+!                write(77,'(99D15.8)') (thess(i,j),j=1,ndf)
+!             end do
  
  !           CONVERTING TO NORMAL COORDINATES
  !           This procedure reduces the dimension of the hessian matrix
@@ -955,11 +956,11 @@
              call dsymm('L','U',ndf,nvdf,1d0,thess,ndf,L,ndf,0d0,tmp,ndf)
              call dgemm('T','N',nvdf,nvdf,ndf,1d0,L,ndf,tmp,ndf,0d0,nhess,nvdf)
  
-             write(77,'(A)') 'MASS WEIGHTED HESSIAN IN NORMAL COORDINATES'
-             write(77,'(2I2)') nm,dsp
-             do i=1,nvdf
-                write(77,'(99D15.8)') (nhess(i,j),j=1,nvdf)
-             end do
+!             write(77,'(A)') 'MASS WEIGHTED HESSIAN IN NORMAL COORDINATES'
+!             write(77,'(2I2)') nm,dsp
+!             do i=1,nvdf
+!                write(77,'(99D15.8)') (nhess(i,j),j=1,nvdf)
+!             end do
  
              if (n==0) then
                 hess0=nhess
@@ -980,22 +981,22 @@
  !     ------------------------------------------------------------------
  !     DEBUG
  !     ------------------------------------------------------------------
-       write(77,'(A)') '--------------------------------------------'
-       write(77,'(A)') 'MASS WEIGHTED HESSIANS IN NORMAL COORDINATES'
-       write(77,'(A)') '--------------------------------------------'
-       write(77,'(A)') 'EQUILIBRIUM GEOMETRY'
-       DO i=1,nvdf
-          write(77,'(99D14.6)') (hess0(i,j),j=1,nvdf)
-       END DO
-       DO nm=1,nvdf
-          DO dsp=-1,1,2
-             write(77,*)
-             write(77,'(2I3)') nm,dsp
-             DO i=1,nvdf
-                write(77,'(99D14.6)') (hess(nm,dsp,i,j),j=1,nvdf)
-             END DO
-          END DO
-       END DO
+!       write(77,'(A)') '--------------------------------------------'
+!       write(77,'(A)') 'MASS WEIGHTED HESSIANS IN NORMAL COORDINATES'
+!       write(77,'(A)') '--------------------------------------------'
+!       write(77,'(A)') 'EQUILIBRIUM GEOMETRY'
+!       DO i=1,nvdf
+!          write(77,'(99D14.6)') (hess0(i,j),j=1,nvdf)
+!       END DO
+!       DO nm=1,nvdf
+!          DO dsp=-1,1,2
+!             write(77,*)
+!             write(77,'(2I3)') nm,dsp
+!             DO i=1,nvdf
+!                write(77,'(99D14.6)') (hess(nm,dsp,i,j),j=1,nvdf)
+!             END DO
+!          END DO
+!       END DO
  !     ------------------------------------------------------------------
  
        end subroutine
@@ -1397,21 +1398,24 @@
  !     NORMALIZE MASS-WEIGHTED NORMAL MODES
        do nm=1,nvdf
           nmt=nmodes(:,nm)
-          write(77,'(99D16.8)') nmodes(:,nm)
-          write(77,'(99D16.8)') nmt
-          write(77,'(F16.8)') dnrm2(ndf,nmt,1)
+!          write(77,'(99D16.8)') nmodes(:,nm)
+!          write(77,'(99D16.8)') nmt
+!          write(77,'(F16.8)') dnrm2(ndf,nmt,1)
           nmt=nmt/dnrm2(ndf,nmt,1)
-          write(77,'(99D16.8)') nmt
-          write(77,'(F16.8)') dnrm2(ndf,nmt,1)
+!          write(77,'(99D16.8)') nmt
+!          write(77,'(F16.8)') dnrm2(ndf,nmt,1)
           nmodes(:,nm)=nmt
        end do
  
        call dgemm('T','N',nvdf,nvdf,ndf,1d0,nmodes,ndf,nmodes,ndf,0d0,orth,nvdf)
-       do i=1,nvdf
-          write(77,'(99D15.6)') orth(i,:)
-       end do
+!       do i=1,nvdf
+!          write(77,'(99D15.6)') orth(i,:)
+!       end do
  
-        write(77,*) freq
+       write(77,'(A)') 'HARMONIC FREQUENCIES (COMPUTED BY GAUSSIAN)'
+       write(77,'(A)') '-------------------------------------------'
+       write(77,'(999F9.1)') freq
+
  !     CONVERT FREQUENCIES TO AU
        fc = 0d0
        fc = freq
@@ -1423,22 +1427,22 @@
  !     -----------------------------------------------------------
  !     DEBUG
  !     -----------------------------------------------------------
-       write(77,'(A)') 'MASS-WEIGHTED NORMAL MODES'
-       DO i=1,nat
-          DO j=1,3
-             k=j+3*(i-1)
-             write(77,'(99F12.8)') (nmodes(k,l),l=1,nvdf)
-          END DO
-       END DO
- 
-       write(77,'(A)') 'FREQUENCIES (cm-1)'
-       write(77,'(99F12.5)') (freq(j),j=1,nvdf)
- 
-       write(77,'(A)') 'FREQUENCIES (cm-1)'
-       write(77,'(99D12.5)') (fc(j),j=1,nvdf)
- 
-       write(77,'(A)') 'ATOMIC MASSES'
-       write(77,'(99F14.5)') (atmass(j),j=1,nat)
+!       write(77,'(A)') 'MASS-WEIGHTED NORMAL MODES'
+!       DO i=1,nat
+!          DO j=1,3
+!             k=j+3*(i-1)
+!             write(77,'(99F12.8)') (nmodes(k,l),l=1,nvdf)
+!          END DO
+!       END DO
+! 
+!       write(77,'(A)') 'FREQUENCIES (cm-1)'
+!       write(77,'(99F12.5)') (freq(j),j=1,nvdf)
+! 
+!       write(77,'(A)') 'FREQUENCIES (cm-1)'
+!       write(77,'(99D12.5)') (fc(j),j=1,nvdf)
+! 
+!       write(77,'(A)') 'ATOMIC MASSES'
+!       write(77,'(99F14.5)') (atmass(j),j=1,nat)
  !     -----------------------------------------------------------
  
        end subroutine
