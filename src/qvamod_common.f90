@@ -2797,7 +2797,7 @@
        nm2=ref(3)
        qn2=ref(4)
  
-       psi=0.0d0
+       psi=0
        if (nm1 /= 0) psi(nm1) = qn1
        if (nm2 /= 0) psi(nm2) = qn2
  
