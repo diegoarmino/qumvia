@@ -50,16 +50,26 @@
       integer :: qva_extprog
       integer :: doconfsel
       integer :: csdepth
+<<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
       integer :: nmorse
       integer :: nsinh
       integer :: hess_norder
+=======
+      integer :: rraman
+>>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
       real*8  :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
       real*8  :: selcut1
       real*8  :: selcut2
       real*8  :: qva_dstep
+<<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
       real*8  :: hess_h
+=======
+      real*8  :: laserfreq
+      real*8  :: rrint_damp
+      real*8  :: rri_fxyz
+>>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
     end type qva_nml_type
 
     type qva_cli_type
@@ -93,21 +103,35 @@
           integer :: qva_extprog
           integer :: doconfsel
           integer :: csdepth
+<<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
           integer :: nmorse
           integer :: nsinh
           integer :: hess_norder
+=======
+          integer :: rraman
+>>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
           real*8  :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
           real*8  :: selcut1
           real*8  :: selcut2
           real*8  :: qva_dstep
+<<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
           real*8  :: hess_h
+=======
+          real*8  :: laserfreq
+          real*8  :: rrint_damp
+          real*8  :: rri_fxyz
+>>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
        
           namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
+<<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
           nmorse,nsinh,hess_h,hess_norder
+=======
+          rraman,laserfreq,rrint_damp,rri_fxyz
+>>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
        
           integer :: ifind, ierr
        
@@ -130,10 +154,17 @@
           doconfsel=1
           csdepth=2
           csiterfactor=10d0
+<<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
           nmorse=0
           nsinh=0
           hess_h=2d-2
           hess_norder=1
+=======
+          rraman=0
+          laserfreq=500d0
+          rrint_damp=0d0
+          rri_fxyz=0.001d0
+>>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
        
        !  READ NAMELIST
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
@@ -166,10 +197,17 @@
           qva_nml%doconfsel=doconfsel
           qva_nml%csdepth=csdepth
           qva_nml%csiterfactor=csiterfactor
+<<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
           qva_nml%nmorse=nmorse
           qva_nml%nsinh=nsinh
           qva_nml%hess_h=hess_h
           qva_nml%hess_norder=hess_norder
+=======
+          qva_nml%laserfreq=laserfreq
+          qva_nml%rraman=rraman
+          qva_nml%rrint_damp=rrint_damp
+          qva_nml%rri_fxyz=rri_fxyz
+>>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
        
        end subroutine get_qva_nml
  
@@ -193,16 +231,26 @@
           write(77,'(A,I3)') '  qva_extprog = ',qva_nml%qva_extprog
           write(77,'(A,I3)') '  doconfsel = ',qva_nml%doconfsel
           write(77,'(A,I3)') '  csdepth = ',qva_nml%csdepth
+<<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
           write(77,'(A,I3)') '  nmorse = ',qva_nml%nmorse
           write(77,'(A,I3)') '  nsinh = ',qva_nml%nsinh
           write(77,'(A,I3)') '  hess_norder = ',qva_nml%hess_norder
+=======
+          write(77,'(A,I3)') '  rraman = ',qva_nml%rraman
+>>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
           write(77,'(A,F7.2)') '  csiterfactor = ',qva_nml%csiterfactor
           write(77,'(A,F7.3)') '  vscf_gauswidth = ',qva_nml%vscf_gauswidth
           write(77,'(A,F7.0)') '  ethresh = ',qva_nml%ethresh
           write(77,'(A,F7.0)') '  resthresh = ',qva_nml%resthresh
+          write(77,'(A,F7.2)') '  laserfreq = ',qva_nml%laserfreq
           write(77,'(A,D10.3)') '  selcut1 = ',qva_nml%selcut1
           write(77,'(A,D10.3)') '  selcut2 = ',qva_nml%selcut2
+<<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
           write(77,'(A,D10.3)') '  hess_h = ',qva_nml%hess_h
+=======
+          write(77,'(A,D10.3)') '  rrint_damp = ',qva_nml%rrint_damp
+          write(77,'(A,D10.3)') '  rri_fxyz = ',qva_nml%rri_fxyz
+>>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
           write(77,'(A)') ' -------------------------- '
           write(77,*) 
  
