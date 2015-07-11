@@ -35,7 +35,11 @@ module qvamod_lioexcl
    implicit none
    private
    public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml,&
+<<<<<<< cb52330281e84ee344e85760f1b200e1508f82b8
            & print_lio_nml, read_coords_lio
+=======
+           & print_lio_nml,rrintensities
+>>>>>>> Added Resonant Raman Intesities code to qvamod_lioexcl
 
 
    type lio_nml_type
@@ -1872,6 +1876,358 @@ contains
       write(77,'(A)') 'HESSIAN EIGENVALUES'
       write(77,'(9D14.6)') eig
       end subroutine
+
+
+
+
+      subroutine rrintensities(qva_cli,qva_nml,nqmatoms)
+!     ------------------------------------------------------------------
+!     GENERATES GEOMETRIES FOR SEMINUMERICAL QFF USING HESSIANS
+!     TO BE COMPUTED USING AN EXTERNAL ELECTRONIC STRUCTURE SOFTWARE.
+!     ------------------------------------------------------------------
+      use garcha_mod
+      implicit none
+
+      type(qva_nml_type), intent(in) :: qva_nml
+      type(qva_cli_type), intent(in) :: qva_cli
+      integer,intent(in) :: nqmatoms
+
+      integer             :: ngaus
+      integer             :: ndf                  ! Number of deg of freedm (3*nqmatoms)
+      integer             :: nvdf                 ! Number of vib degrees of freedom (ndf-6)
+      integer             :: qva_extprog          ! External program gam=1,gaus=2
+      integer             :: qumvia_nmc
+      integer             :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+      real*8              :: alpha(nvdf,2,3,3) ! Array of polarizabilities.
+      real*8              :: dalpha(nvdf,3,3)     ! Derivatives of apha vs. nmodes
+      real*8              :: E_mod                ! Derivatives of apha vs. nmodes
+      real*8              :: dy                   ! Step size factor dy. Default=0.5d0
+      real*8              :: qvageom(3,nqmatoms)  ! QM atom coordinates
+
+      real*8              :: nmodes(3*nqmatoms,3*nqmatoms) ! mw Hessian eigenvectors.
+      real*8              :: freq(3*nqmatoms)     ! Harmonic frequencies
+      real*8              :: eig(3*nqmatoms)      ! Harmonic force constants.
+      real*8              :: atmass(nqmatoms)     ! Atomic masses
+      real*8              :: L(3*nqmatoms,3*nqmatoms-6)    ! Array of VIBRATIONAL nmodes.
+      real*8              :: hii(3*nqmatoms-6)    ! Harmonic force constants.
+      real*8              :: omega(3*nqmatoms-6)  ! Harmonic frequencies omega(nm)=Sqrt(hii(nm))
+      real*8              :: X0(3,nqmatoms)       ! Initial geometry in cartesian and Angstroms.
+      real*8              :: Xm(3,nqmatoms)       ! Displaced geometry in cartesian and Angstroms.
+      real*8              :: dX(3,nqmatoms)       ! Displacement vector (cart and Angs).
+      real*8              :: dX1(3,nqmatoms)      ! Displacement vector (cart and Angs).
+      real*8              :: dQ(3*nqmatoms-6)     ! dQ(mode) = dy/Sqrt(omega_i) in Atomic units.
+      real*8              :: Mass(3*nqmatoms)     ! Sqrt mass weights matrix.
+      real*8              :: Minv(3*nqmatoms)     ! Inverse sqrt mass weights matrix.
+      integer             :: nat
+      integer             :: an
+      integer             :: i, j, k
+      integer             :: m, nm, p
+      integer             :: step
+      integer             :: dd(2)
+      integer             :: openstatus,closestatus
+      character(len=2),dimension(36),parameter :: atsym=(/"H ","He",&
+      & "Li","Be","B ","C ","N ","O ","F ","Ne","Na","Mg","Al","Si",&
+      & "P ","S ","Cl","Ar","K ","Ca","Sc","Ti","V ","Cr","Mn","Fe",&
+      & "Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr"/)
+    
+      include "qvmbia_param.f"
+
+!     Read geometry file.
+      call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
+
+!     Some aliases
+      qumvia_nmc = qva_nml%qumvia_nmc
+      qva_extprog = qva_nml%qva_extprog
+      dy=qva_nml%qva_dstep
+
+      ngaus=16
+      ndf=3*nqmatoms
+      nvdf=ndf-6
+
+      call hessian(qvageom,nqmatoms,at_numbers,nmodes,eig)
+      L(:,7:ndf)=nmodes(:,nm)
+      hii(7:ndf)=eig(nm)
+
+
+!     We define the step size acording to J.Chem.Phys 121:1383
+!     Using a dimensionless reduced coordinate y=sqrt(omega_i/hbar)Qi
+!     where omega_i is the freq of mode i and Qi is normal coordinate 
+!     of mode i. Then the step size dQi is given by
+!
+!                    dQi = dy/sqrt(omega_i)
+!
+!     Where omega_i = Sqrt(Ki/mi) in atomic units (hbar=1). 
+!     dy is arbitrary and set to 0.5 by default.
+!     To obtain the displacement vector in cartesian coordinates dXi
+!                  
+!                   dXi = M^(-1) * Li * dQi
+!
+!     Where M^(-1) is the inverse mass weights matrix diag(1/Sqrt(mi))
+!     Li is the normal mode i (a column eigenvector of the hessian).
+
+
+      write(77,'(A)')'-----------------------------------------------'
+      write(77,'(A)')' GENERATING GEOMETRIES FOR HESSIAN COMPUTATION '
+      write(77,'(A)')'-----------------------------------------------'
+
+      omega = Sqrt(hii)
+      dQ = dy/Sqrt(omega)
+
+!       write(77,'(A)')'SCALE FACTOR FOR DISPLACEMENTS'
+!       write(77,'(99F15.10)') dQ
+
+
+!     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
+      do i=1,nqmatoms
+         do j=1,3
+            Mass(3*(i-1)+j) = sqrt(atmass(i))
+            Minv(3*(i-1)+j) = 1d0/sqrt(atmass(i))
+         end do
+      end do
+
+!-----------------------------------------------------------------------
+!     GENERATING STENCIL GEOMETRIES
+!-----------------------------------------------------------------------
+!     Converting units from Angstroms to Bohrs. 
+      X0=qvageom/a0
+
+!     Calculating displaced coordinates and energy at 2 grid points 
+!     along each normal mode.
+      dd=(/-1,1/)
+      write(77,'(A)') 'LABELS FOR 1d STENCIL POINTS'
+      write(77,'(4I3)') (dd(i),i=1,2)
+
+      open(UNIT=16, FILE=qva_cli%ste, ACTION='WRITE', IOSTAT=openstatus)
+      if (openstatus /= 0) then
+         write(77,'(A,A)') 'COULD NOT OPEN FILE ',qva_cli%ste
+         STOP
+      end if
+!     ------------------------------------------------------------
+!     DEBUG
+!     ------------------------------------------------------------
+      write(77,'(A)') 'EQUILIBRIUM GEOMETRY (X0) (ANGS)'
+      do i=1,nqmatoms
+         write(77,'(3F15.10)') X0(:,i)*a0
+      end do
+!     ------------------------------------------------------------
+
+      write(77,'(A)') 'DISPLACEMENT VECTORS (dX) (ANGS)'
+      step=1
+      do nm=1,nvdf
+         do j=1,2
+            do k=1,nqmatoms
+               do m=1,3
+                  p = 3*(k-1)+m
+                  dX(m,k) = Minv(p)*L(p,nm)*dQ(nm)   ! Scaling/Mass unweighting
+               end do
+            end do
+            Xm = X0 + dd(j)*dX  ! Displacing along nmode
+            Xm=Xm*a0            ! BACK TO ANGSTROMS
+
+!           ------------------------------------------------------------
+!           DEBUG
+!           ------------------------------------------------------------
+            write(77,'(A)') 'dX'
+            do i=1,nqmatoms
+               write(77,'(3F15.10)') dd(j)*dX(:,i)*a0
+            end do
+            write(77,'(A)') 'DISPLACED GEOM'
+            do i=1,nqmatoms
+               write(77,'(3F15.10)') Xm(:,i)
+            end do
+!           ------------------------------------------------------------
+
+!           ------------------------------------------------------------
+!           WRITING DISPLACED COORDINATES TO OUTPUT FILE
+            write(16,'(2I3,I5)') nm,dd(j),step
+            do k=1,nqmatoms
+               an=at_numbers(k)
+               if (qva_extprog==1) then
+                  write(16,'(A2,I5,3F15.10)') atsym(an),an,Xm(:,k)
+               elseif (qva_extprog==2) then
+                  write(16,'(A2,3F15.10)') atsym(an),Xm(:,k)
+               end if
+            end do
+
+!           ------------------------------------------------------------
+!           HERE BEGINS TIMEDEPENDENT PART
+
+            timedep = 1
+            fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)
+            fxyz(2,:)=(/0d0,qva_nml%rri_fxyz,0d0/)
+            fxyz(3,:)=(/0d0,0d0,qva_nml%rri_fxyz/)
+
+            do i=1,3
+
+               Fx=fxyz(i,1)
+               Fy=fxyz(i,2)
+               Fz=fxyz(i,3)
+
+               E_mod=qva_nml%rri_fxyz
+               call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)   
+
+!              alpha(nmode,stencil_point,field_coord,dip_coord)
+               call rrtdanalyze('x.dip',ns,ts,freq,ftr,fti)
+               alpha(nm,j,i,1) = ABS(CMPLX(ftr,fti,8))/E_mod
+
+               call rrtdanalyze('y.dip',ns,ts,freq,ftr,fti)
+               alpha(nm,j,i,2) = ABS(CMPLX(ftr,fti,8))/E_mod
+
+               call rrtdanalyze('z.dip',ns,ts,freq,ftr,fti)
+               alpha(nm,j,i,3) = ABS(CMPLX(ftr,fti,8))/E_mod
+
+            end do
+!           END OF TD PART
+!           ------------------------------------------------------------
+            step = step + 1
+
+         end do
+      end do
+
+      close(16,iostat=closestatus)
+      if (closestatus/=0) then
+         write(77,'(A)') 'ERROR: COULD NOT CLOSE FILE'
+         STOP
+      end if
+
+!     COMPUTE DERIVATIVES OF POLARIZABILITY VS NORMAL MODES
+!     ------------------------------------------------------------------
+      call derivate_alpha(alpha,dQ,dalpha)
+      
+!     COMPUTE RESONANT RAMAN ACTIVITY
+!     ------------------------------------------------------------------
+      call rractivity(dalpha,nvdf,rract)
+
+!     PRINT RESONANT RAMAN ACTIVITY
+!     ------------------------------------------------------------------
+      call printrract(rract)
+
+      end subroutine
+
+      subroutine printrract(rract,nvdf)
+         implicit none
+!        --------------------------------------------------------------
+         integer,intent(in)       :: nvdf
+         real*8,intent(in)        :: rract(nvdf)
+!        --------------------------------------------------------------
+         
+         write(77,'(A)')
+         write(77,'(A)') ' RESONANT RAMAN ACTIVITIES S=45|a|^2 + 7|g|^2  '
+         write(77,'(A)') ' --------------------------------------------  '
+         write(77,'(A)') ' MODE     ACTIVITIES         '
+         do nm=1,nvdf
+            write(77,'(I3,D18.6)') nm,rract(nm)
+         end do
+
+      end subroutine
+
+      subroutine rractivity(dalpha,nvdf,rract)
+         implicit none
+!        --------------------------------------------------------------
+         integer,intent(in)       :: nvdf
+         real*8,intent(in)        :: dalpha(nvdf,3,3)
+         real*8,intent(out)       :: rract(nvdf)
+
+         real*8                   :: isot(nvdf)
+         real*8                   :: anis(nvdf)
+         real*8                   :: y1,y2,y3,y4
+!        --------------------------------------------------------------
+         do nm=1,nvdf
+!           ISOTROPIC DYNAMIC POLARIZABILITY
+            isot(nm)=(dalpha(nm,1,1)+dalpha(nm,2,2)+dalpha(nm,3,3))/3d0
+
+!           ANISOTROPIC DYNAMIC POLARIZABILITY
+            y1=ABS(dalpha(nm,1,1)-dalpha(nm,2,2))**2
+            y2=ABS(dalpha(nm,2,2)-dalpha(nm,3,3))**2
+            y3=ABS(dalpha(nm,3,3)-dalpha(nm,1,1))**2
+            y4=6d0*(ABS(dalpha(nm,1,2))**2+ABS(dalpha(nm,2,3))**2+ABS(dalpha(nm,3,1)**2)
+            anis(nm)=0.5d0*(y1+y2+y3+y4)
+
+!           RESONANT RAMAN ACTIVITY "S"
+            rract(nm)=45d0*isot(nm) + 7d0*anis(nm)
+
+!           RESONANT RAMAN CROSS SECTION...
+         end do
+
+      end subroutine
+     
+      subroutine derivate_alpha(alpha,dQ,dalpha)
+
+         implicit none
+!        --------------------------------------------------------------
+         real*8,intent(in)  :: dQ(nvdf)
+         real*8,intent(in)  :: alpha(nvdf,2,3,3)
+         real*8,intent(out) :: dalpha(nvdf,3,3)
+!        --------------------------------------------------------------
+
+         dalpha=0d0
+         do nm=1,nvdf
+            do i=1,3
+               do j=1,3
+                  dalpha(nm,i,j)=(alpha(nm,2,i,j)-alpha(nm,1,i,j))*0.5d0/dQ(nm)
+               end do
+            end do
+         end do
+
+      end subroutine
+
+      subroutine rrtdanalyze(traj,ns,ts,freq,ftr,fti)
+         implicit none
+
+!        --------------------------------------------------------------
+         character(20),intent(in) :: traj  ! Trajectory file name.
+         integer,intent(in)       :: ns    ! Number of steps.
+         real*8,intent(in)        :: ts    ! Time step (fs).
+         real*8,intent(in)        :: damp  ! Damping factor.
+         real*8,intent(in)        :: freq  ! Resonant frequency.
+         real*8,intent(out)       :: fti 
+         real*8,intent(out)       :: ftr 
+
+         real*8       :: nu
+         real*8       :: t 
+         real*8       :: ene 
+         real*8       :: pi 
+         real*8       :: lambda
+         integer      :: i, j, k
+
+         real*8, allocatable :: mu(:)
+!        --------------------------------------------------------------
+
+         allocate (mu(1:ns))
+
+         pi = 3.1415926535897932384626433832795d0
+         ts = ts * 1.E-15 !conversion of time step to seconds
+         damp = damp * 1.E15
+
+!        READING TRAJECTORY FILE
+         open(unit=88,file=traj)
+         do i = 1, ns
+           read(88,*) t, mu(i)
+         enddo
+         close(unit=88)
+
+         do i = 1, ns-1
+            mu(i) = mu(i+1) - mu(i)  !takes differences
+            mu(i)=mu(i)/ts
+         end do
+
+!       ---------------------------------------------------------------
+!       FOURIER TRANSFORM
+
+
+        nu = freq ! frequency computed in Hz
+        
+        fti = 0.0d0
+        ftr = 0.0d0
+
+        t=0.0
+        do j = 1,ns-1
+          t = t + ts
+          ftr = ftr + cos(2*pi*t*nu) * mu(j) * exp(-t*damp) ! real part w/ damp
+          fti = fti + sin(2*pi*t*nu) * mu(j) * exp(-t*damp) ! imaginary part w/ damp
+        enddo
+
+      end subroutine 
 
 
 end module qvamod_lioexcl

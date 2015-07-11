@@ -9,8 +9,14 @@ BINDIR=../bin
 OBJDIR=../obj
 
 FC=ifort
+<<<<<<< cb52330281e84ee344e85760f1b200e1508f82b8
 FFLAGS= -O3 -ip -xHost -FR -I${MKL_HOME}/include
 FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME)
+=======
+FFLAGS= -O3 -ip -xHost -FR -I${MKL_HOME}/include 
+FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME) 
+LIOFLAGS= -shared
+>>>>>>> Added Resonant Raman Intesities code to qvamod_lioexcl
 LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(LIO_HOME)/g2g -lg2g -L$(LIO_HOME)/lioamber -llio-g2g
 LIOFLAGS= -I$(LIO_HOME)/lioamber -I$(LIO_HOME)/lioamber/obj
 
@@ -27,7 +33,11 @@ qumvia.cpu: M_kracken.o qvamod_common.o qvamod_cpu.o qvamain_cpu.o
 	$(FC) $(FFLAGS) -o $@ $^ $(FLIBS)
 
 qumvia.lio: M_kracken.o qvamod_common.o qvamod_lioexcl.o qvamod_lio.o qvamain_lio.o
+<<<<<<< cb52330281e84ee344e85760f1b200e1508f82b8
 	$(FC) $(FFLAGS) -o $@ $^ $(FLIBS) $(LIOFLAGS) $(LIOLIBS)
+=======
+	$(FC) $(FFLAGS) $(LIOFLAGS) -o $(LIO_HOME)/lioamber/obj/mods/garcha_mod.o $@ $^ $(FLIBS) $(LIOLIBS)
+>>>>>>> Added Resonant Raman Intesities code to qvamod_lioexcl
 
 #----------------------------------------------------------------------------------------
 # KRACKEN COMMAND LINE PARSER
