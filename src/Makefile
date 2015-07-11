@@ -11,6 +11,7 @@ OBJDIR=../obj
 FC=ifort
 FFLAGS= -O3 -ip -xHost -FR -I${MKL_HOME}/include 
 FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME) 
+LIOFLAGS= -shared
 LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(LIO_HOME)/g2g -lg2g -L$(LIO_HOME)/lioamber -llio-g2g
 
 cpu: clean mkdirs qumvia.cpu mvdirs
@@ -25,7 +26,7 @@ qumvia.cpu: M_kracken.o qvamod_common.o qvamod_cpu.o qvamain_cpu.o
 	$(FC) $(FFLAGS) -o $@ $^ $(FLIBS)
 
 qumvia.lio: M_kracken.o qvamod_common.o qvamod_lioexcl.o qvamod_lio.o qvamain_lio.o
-	$(FC) $(FFLAGS) -o $@ $^ $(FLIBS) $(LIOLIBS)
+	$(FC) $(FFLAGS) $(LIOFLAGS) -o $(LIO_HOME)/lioamber/obj/mods/garcha_mod.o $@ $^ $(FLIBS) $(LIOLIBS)
 
 #----------------------------------------------------------------------------------------
 # KRACKEN COMMAND LINE PARSER
