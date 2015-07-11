@@ -630,7 +630,7 @@ contains
       real*8              :: sign_eig(3*nqmatoms)
       real*8              :: freq(3*nqmatoms)
       real*8              :: qmxyz(3,nqmatoms)
-      real*8              :: clcoords(4,nqmatoms)
+      real*8              :: clcoords(4,nclatoms)
 
       type(qva_nml_type), save     :: qva_nml
 
@@ -1532,16 +1532,17 @@ contains
 
       type(qva_nml_type), intent(in) :: qva_nml
       type(qva_cli_type), intent(in) :: qva_cli
-      integer,intent(in) :: nqmatoms
+      integer,intent(in)  :: nqmatoms
 
+      integer,parameter   :: nclatoms=0
       integer             :: ngaus
       integer             :: ndf                  ! Number of deg of freedm (3*nqmatoms)
       integer             :: nvdf                 ! Number of vib degrees of freedom (ndf-6)
       integer             :: qva_extprog          ! External program gam=1,gaus=2
       integer             :: qumvia_nmc
       integer             :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
-      real*8              :: alpha(nvdf,2,3,3) ! Array of polarizabilities.
-      real*8              :: dalpha(nvdf,3,3)     ! Derivatives of apha vs. nmodes
+      real*8              :: alphat(3*nqmatoms-6,2,3,3) ! Array of polarizabilities.
+      real*8              :: dalpha(3*nqmatoms-6,3,3)     ! Derivatives of apha vs. nmodes
       real*8              :: E_mod                ! Derivatives of apha vs. nmodes
       real*8              :: dy                   ! Step size factor dy. Default=0.5d0
       real*8              :: qvageom(3,nqmatoms)  ! QM atom coordinates
@@ -1560,10 +1561,16 @@ contains
       real*8              :: dQ(3*nqmatoms-6)     ! dQ(mode) = dy/Sqrt(omega_i) in Atomic units.
       real*8              :: Mass(3*nqmatoms)     ! Sqrt mass weights matrix.
       real*8              :: Minv(3*nqmatoms)     ! Inverse sqrt mass weights matrix.
+      real*8              :: escf                 ! Energy computed by SCF_in()
+      real*8              :: dipxyz(3)            ! Dipole moment computed by SCF_in()
+      real*8              :: clcoords(4,nclatoms)
+      real*8              :: fxyz(3,3)
+      real*8              :: ftr,fti
+      real*8              :: rract(3*nqmatoms-6)
       integer             :: nat
       integer             :: an
       integer             :: i, j, k
-      integer             :: m, nm, p
+      integer             :: mm, nm, p
       integer             :: step
       integer             :: dd(2)
       integer             :: openstatus,closestatus
@@ -1572,7 +1579,7 @@ contains
       & "P ","S ","Cl","Ar","K ","Ca","Sc","Ti","V ","Cr","Mn","Fe",&
       & "Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr"/)
     
-      include "qvmbia_param.f"
+!      include "qvmbia_param.f"
 
 !     Read geometry file.
       call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
@@ -1587,8 +1594,8 @@ contains
       nvdf=ndf-6
 
       call hessian(qvageom,nqmatoms,at_numbers,nmodes,eig)
-      L(:,7:ndf)=nmodes(:,nm)
-      hii(7:ndf)=eig(nm)
+      L=nmodes(:,7:ndf)
+      hii=eig(7:ndf)
 
 
 !     We define the step size acording to J.Chem.Phys 121:1383
@@ -1658,9 +1665,9 @@ contains
       do nm=1,nvdf
          do j=1,2
             do k=1,nqmatoms
-               do m=1,3
-                  p = 3*(k-1)+m
-                  dX(m,k) = Minv(p)*L(p,nm)*dQ(nm)   ! Scaling/Mass unweighting
+               do mm=1,3
+                  p = 3*(k-1)+mm
+                  dX(mm,k) = Minv(p)*L(p,nm)*dQ(nm)   ! Scaling/Mass unweighting
                end do
             end do
             Xm = X0 + dd(j)*dX  ! Displacing along nmode
@@ -1706,17 +1713,17 @@ contains
                Fz=fxyz(i,3)
 
                E_mod=qva_nml%rri_fxyz
-               call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)   
+               call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)   
 
 !              alpha(nmode,stencil_point,field_coord,dip_coord)
-               call rrtdanalyze('x.dip',ns,ts,freq,ftr,fti)
-               alpha(nm,j,i,1) = ABS(CMPLX(ftr,fti,8))/E_mod
+               call rrtdanalyze('x.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
+               alphat(nm,j,i,1) = ABS(CMPLX(ftr,fti,8))/E_mod
 
-               call rrtdanalyze('y.dip',ns,ts,freq,ftr,fti)
-               alpha(nm,j,i,2) = ABS(CMPLX(ftr,fti,8))/E_mod
+               call rrtdanalyze('y.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
+               alphat(nm,j,i,2) = ABS(CMPLX(ftr,fti,8))/E_mod
 
-               call rrtdanalyze('z.dip',ns,ts,freq,ftr,fti)
-               alpha(nm,j,i,3) = ABS(CMPLX(ftr,fti,8))/E_mod
+               call rrtdanalyze('z.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
+               alphat(nm,j,i,3) = ABS(CMPLX(ftr,fti,8))/E_mod
 
             end do
 !           END OF TD PART
@@ -1734,7 +1741,7 @@ contains
 
 !     COMPUTE DERIVATIVES OF POLARIZABILITY VS NORMAL MODES
 !     ------------------------------------------------------------------
-      call derivate_alpha(alpha,dQ,dalpha)
+      call derivate_alpha(alphat,dQ,dalpha,nvdf)
       
 !     COMPUTE RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
@@ -1742,7 +1749,7 @@ contains
 
 !     PRINT RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
-      call printrract(rract)
+      call printrract(rract,nvdf)
 
       end subroutine
 
@@ -1751,6 +1758,7 @@ contains
 !        --------------------------------------------------------------
          integer,intent(in)       :: nvdf
          real*8,intent(in)        :: rract(nvdf)
+         integer                  :: nm
 !        --------------------------------------------------------------
          
          write(77,'(A)')
@@ -1773,6 +1781,7 @@ contains
          real*8                   :: isot(nvdf)
          real*8                   :: anis(nvdf)
          real*8                   :: y1,y2,y3,y4
+         integer                  :: nm
 !        --------------------------------------------------------------
          do nm=1,nvdf
 !           ISOTROPIC DYNAMIC POLARIZABILITY
@@ -1782,7 +1791,7 @@ contains
             y1=ABS(dalpha(nm,1,1)-dalpha(nm,2,2))**2
             y2=ABS(dalpha(nm,2,2)-dalpha(nm,3,3))**2
             y3=ABS(dalpha(nm,3,3)-dalpha(nm,1,1))**2
-            y4=6d0*(ABS(dalpha(nm,1,2))**2+ABS(dalpha(nm,2,3))**2+ABS(dalpha(nm,3,1)**2)
+            y4=6d0*(ABS(dalpha(nm,1,2))**2+ABS(dalpha(nm,2,3))**2+ABS(dalpha(nm,3,1))**2)
             anis(nm)=0.5d0*(y1+y2+y3+y4)
 
 !           RESONANT RAMAN ACTIVITY "S"
@@ -1793,13 +1802,15 @@ contains
 
       end subroutine
      
-      subroutine derivate_alpha(alpha,dQ,dalpha)
+      subroutine derivate_alpha(alpha,dQ,dalpha,nvdf)
 
          implicit none
 !        --------------------------------------------------------------
+         integer,intent(in) :: nvdf
          real*8,intent(in)  :: dQ(nvdf)
          real*8,intent(in)  :: alpha(nvdf,2,3,3)
          real*8,intent(out) :: dalpha(nvdf,3,3)
+         integer            :: nm,i,j
 !        --------------------------------------------------------------
 
          dalpha=0d0
@@ -1813,11 +1824,11 @@ contains
 
       end subroutine
 
-      subroutine rrtdanalyze(traj,ns,ts,freq,ftr,fti)
+      subroutine rrtdanalyze(traj,ns,ts,freq,damp,ftr,fti)
          implicit none
 
 !        --------------------------------------------------------------
-         character(20),intent(in) :: traj  ! Trajectory file name.
+         character(5),intent(in) :: traj  ! Trajectory file name.
          integer,intent(in)       :: ns    ! Number of steps.
          real*8,intent(in)        :: ts    ! Time step (fs).
          real*8,intent(in)        :: damp  ! Damping factor.
@@ -1827,7 +1838,9 @@ contains
 
          real*8       :: nu
          real*8       :: t 
+         real*8       :: tss
          real*8       :: ene 
+         real*8       :: damps
          real*8       :: pi 
          real*8       :: lambda
          integer      :: i, j, k
@@ -1838,8 +1851,8 @@ contains
          allocate (mu(1:ns))
 
          pi = 3.1415926535897932384626433832795d0
-         ts = ts * 1.E-15 !conversion of time step to seconds
-         damp = damp * 1.E15
+         tss = ts * 1.E-15 !conversion of time step to seconds
+         damps = damp * 1.E15
 
 !        READING TRAJECTORY FILE
          open(unit=88,file=traj)
@@ -1850,7 +1863,7 @@ contains
 
          do i = 1, ns-1
             mu(i) = mu(i+1) - mu(i)  !takes differences
-            mu(i)=mu(i)/ts
+            mu(i)=mu(i)/tss
          end do
 
 !       ---------------------------------------------------------------
@@ -1864,9 +1877,9 @@ contains
 
         t=0.0
         do j = 1,ns-1
-          t = t + ts
-          ftr = ftr + cos(2*pi*t*nu) * mu(j) * exp(-t*damp) ! real part w/ damp
-          fti = fti + sin(2*pi*t*nu) * mu(j) * exp(-t*damp) ! imaginary part w/ damp
+          t = t + tss
+          ftr = ftr + cos(2*pi*t*nu) * mu(j) * exp(-t*damps) ! real part w/ damp
+          fti = fti + sin(2*pi*t*nu) * mu(j) * exp(-t*damps) ! imaginary part w/ damp
         enddo
 
       end subroutine 

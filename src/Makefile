@@ -9,10 +9,11 @@ BINDIR=../bin
 OBJDIR=../obj
 
 FC=ifort
-FFLAGS= -O3 -ip -xHost -FR -I${MKL_HOME}/include 
+FFLAGS= -O3 -ip -xHost -FR -fPIC -I${MKL_HOME}/include 
 FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME) 
-LIOFLAGS= -shared
 LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(LIO_HOME)/g2g -lg2g -L$(LIO_HOME)/lioamber -llio-g2g
+LIOINC=$(LIO_HOME)/lioamber/obj/garcha_g2g_obj/mods
+LIOFLAGS= -shared -I$(LIOINC) -I$(LIO_HOME)/lioamber
 
 cpu: clean mkdirs qumvia.cpu mvdirs
 
@@ -26,7 +27,7 @@ qumvia.cpu: M_kracken.o qvamod_common.o qvamod_cpu.o qvamain_cpu.o
 	$(FC) $(FFLAGS) -o $@ $^ $(FLIBS)
 
 qumvia.lio: M_kracken.o qvamod_common.o qvamod_lioexcl.o qvamod_lio.o qvamain_lio.o
-	$(FC) $(FFLAGS) $(LIOFLAGS) -o $(LIO_HOME)/lioamber/obj/mods/garcha_mod.o $@ $^ $(FLIBS) $(LIOLIBS)
+	$(FC) $(FFLAGS) $(LIOFLAGS) -o $@ $^ $(LIOINC)/garcha_mod.o $(FLIBS) $(LIOLIBS)
 
 #----------------------------------------------------------------------------------------
 # KRACKEN COMMAND LINE PARSER
@@ -53,7 +54,8 @@ qvamain_cpu.o: qvamod_common.mod qvamod_cpu.mod qvamain.f90
 # LIO COMPILATION RULES
 #----------------------------------------------------------------------------------------
 qvamod_lioexcl.o: qvamod_common.mod qvamod_lioexcl.f90
-	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) $(LIOLIBS) -o qvamod_lioexcl.o
+	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) \
+		$(LIOLIBS) -o qvamod_lioexcl.o $(LIOINC)/garcha_mod.o 
 
 qvamod_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_alt.f90 
 	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_alt.f90 $(FLIBS) $(LIOLIBS) \

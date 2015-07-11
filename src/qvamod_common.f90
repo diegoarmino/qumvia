@@ -50,12 +50,16 @@
       integer :: qva_extprog
       integer :: doconfsel
       integer :: csdepth
+      integer :: rraman
       real*8  :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
       real*8  :: selcut1
       real*8  :: selcut2
       real*8  :: qva_dstep
+      real*8  :: laserfreq
+      real*8  :: rrint_damp
+      real*8  :: rri_fxyz
     end type qva_nml_type
 
     type qva_cli_type
@@ -89,16 +93,21 @@
           integer :: qva_extprog
           integer :: doconfsel
           integer :: csdepth
+          integer :: rraman
           real*8  :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
           real*8  :: selcut1
           real*8  :: selcut2
           real*8  :: qva_dstep
+          real*8  :: laserfreq
+          real*8  :: rrint_damp
+          real*8  :: rri_fxyz
        
           namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
-          resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog
+          resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
+          rraman,laserfreq,rrint_damp,rri_fxyz
        
           integer :: ifind, ierr
        
@@ -121,6 +130,10 @@
           doconfsel=1
           csdepth=2
           csiterfactor=10d0
+          rraman=0
+          laserfreq=500d0
+          rrint_damp=0d0
+          rri_fxyz=0.001d0
        
        !  READ NAMELIST
        !  DANGER: Is it necessary to open file? I guess so.
@@ -154,6 +167,10 @@
           qva_nml%doconfsel=doconfsel
           qva_nml%csdepth=csdepth
           qva_nml%csiterfactor=csiterfactor
+          qva_nml%laserfreq=laserfreq
+          qva_nml%rraman=rraman
+          qva_nml%rrint_damp=rrint_damp
+          qva_nml%rri_fxyz=rri_fxyz
        
        end subroutine get_qva_nml
  
@@ -177,12 +194,16 @@
           write(77,'(A,I3)') '  qva_extprog = ',qva_nml%qva_extprog
           write(77,'(A,I3)') '  doconfsel = ',qva_nml%doconfsel
           write(77,'(A,I3)') '  csdepth = ',qva_nml%csdepth
+          write(77,'(A,I3)') '  rraman = ',qva_nml%rraman
           write(77,'(A,F7.2)') '  csiterfactor = ',qva_nml%csiterfactor
           write(77,'(A,F7.3)') '  vscf_gauswidth = ',qva_nml%vscf_gauswidth
           write(77,'(A,F7.0)') '  ethresh = ',qva_nml%ethresh
           write(77,'(A,F7.0)') '  resthresh = ',qva_nml%resthresh
+          write(77,'(A,F7.2)') '  laserfreq = ',qva_nml%laserfreq
           write(77,'(A,D10.3)') '  selcut1 = ',qva_nml%selcut1
           write(77,'(A,D10.3)') '  selcut2 = ',qva_nml%selcut2
+          write(77,'(A,D10.3)') '  rrint_damp = ',qva_nml%rrint_damp
+          write(77,'(A,D10.3)') '  rri_fxyz = ',qva_nml%rri_fxyz
           write(77,'(A)') ' -------------------------- '
           write(77,*) 
  
