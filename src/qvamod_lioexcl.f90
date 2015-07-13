@@ -1582,6 +1582,7 @@ contains
 !      include "qvmbia_param.f"
 
 !     Read geometry file.
+      write(77,'(A)') 'READING GEOMETRY'
       call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
 
 !     Some aliases
@@ -1593,6 +1594,7 @@ contains
       ndf=3*nqmatoms
       nvdf=ndf-6
 
+      write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
       call hessian(qvageom,nqmatoms,at_numbers,nmodes,eig)
       L=nmodes(:,7:ndf)
       hii=eig(7:ndf)
@@ -1616,7 +1618,8 @@ contains
 
 
       write(77,'(A)')'-----------------------------------------------'
-      write(77,'(A)')' GENERATING GEOMETRIES FOR HESSIAN COMPUTATION '
+      write(77,'(A)')'   GENERATING GEOMETRIES FOR QFF COMPUTATION   '
+      write(77,'(A)')'          USING ANALYTICAL HESSIANS            '
       write(77,'(A)')'-----------------------------------------------'
 
       omega = Sqrt(hii)
@@ -1712,7 +1715,7 @@ contains
                Fy=fxyz(i,2)
                Fz=fxyz(i,3)
 
-               E_mod=qva_nml%rri_fxyz
+               E_mod=qva_nml%rri_fxyz*514.220652d0             ! Convert to V/nm
                call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)   
 
 !              alpha(nmode,stencil_point,field_coord,dip_coord)
@@ -1827,7 +1830,7 @@ contains
 
       end subroutine
 
-      subroutine rrtdanalyze(traj,ns,ts,freq,damp,ftr,fti)
+      subroutine rrtdanalyze(traj,ns,ts,laserlambda,damp,ftr,fti)
          implicit none
 
 !        --------------------------------------------------------------
@@ -1835,7 +1838,7 @@ contains
          integer,intent(in)       :: ns    ! Number of steps.
          real*8,intent(in)        :: ts    ! Time step (fs).
          real*8,intent(in)        :: damp  ! Damping factor.
-         real*8,intent(in)        :: freq  ! Resonant frequency.
+         real*8,intent(in)        :: laserlambda  ! Resonant frequency.
          real*8,intent(out)       :: fti 
          real*8,intent(out)       :: ftr 
 
@@ -1847,6 +1850,8 @@ contains
          real*8       :: pi 
          real*8       :: lambda
          integer      :: i, j, k
+
+         real*8,parameter :: c=299792458d0*1d9   !Speed o' light nm/s
 
          real*8, allocatable :: mu(:)
 !        --------------------------------------------------------------
@@ -1866,14 +1871,14 @@ contains
 
          do i = 1, ns-1
             mu(i) = mu(i+1) - mu(i)  !takes differences
-            mu(i)=mu(i)/tss
+            mu(i) = mu(i)/tss
          end do
 
 !       ---------------------------------------------------------------
 !       FOURIER TRANSFORM
 
 
-        nu = freq ! frequency computed in Hz
+        nu =  c/laserlambda    ! nu in Hz, lambda in nm, c in nm/s
         
         fti = 0.0d0
         ftr = 0.0d0
