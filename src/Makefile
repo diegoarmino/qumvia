@@ -13,7 +13,8 @@ FFLAGS= -O3 -ip -xHost -FR -fPIC -I${MKL_HOME}/include
 FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME) 
 LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(LIO_HOME)/g2g -lg2g -L$(LIO_HOME)/lioamber -llio-g2g
 LIOINC=$(LIO_HOME)/lioamber/obj/garcha_g2g_obj/mods
-LIOFLAGS= -shared -I$(LIOINC) -I$(LIO_HOME)/lioamber
+#LIOFLAGS= -shared -I$(LIOINC) -I$(LIO_HOME)/lioamber
+LIOFLAGS= -I$(LIOINC) -I$(LIO_HOME)/lioamber
 
 cpu: clean mkdirs qumvia.cpu mvdirs
 
