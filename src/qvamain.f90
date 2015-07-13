@@ -153,6 +153,14 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
       call geoms4qff(qva_cli,qva_nml,nqmatoms)
       STOP
 
+#ifdef qvalio
+   ELSE IF (qva_nml%nhess .eq. 3) THEN
+
+!     COMPUTE HARMONIC SPECTRA WITH RESONANT RAMAN INTENSITIES.
+      call rrintensities(qva_cli,qva_nml,nqmatoms)
+      STOP
+#endif
+
    END IF
 
 end program qumvia_main
