@@ -1762,11 +1762,13 @@ contains
 !        --------------------------------------------------------------
          
          write(77,'(A)')
+         write(77,'(A)') ' --------------------------------------------  '
+         write(77,'(A)') '         HARMONIC FREQUENCIES AND              '
          write(77,'(A)') ' RESONANT RAMAN ACTIVITIES S=45|a|^2 + 7|g|^2  '
          write(77,'(A)') ' --------------------------------------------  '
-         write(77,'(A)') ' MODE     ACTIVITIES         '
+         write(77,'(A)') ' MODE     FREQUENCIES    RR ACTIVITIES         '
          do nm=1,nvdf
-            write(77,'(I3,D18.6)') nm,rract(nm)
+            write(77,'(I3,F10.2,D18.6)') nm, hii(nm), rract(nm)
          end do
 
       end subroutine
