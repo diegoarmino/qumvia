@@ -1749,15 +1749,16 @@ contains
 
 !     PRINT RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
-      call printrract(rract,nvdf)
+      call printrract(rract,nvdf,hii)
 
       end subroutine
 
-      subroutine printrract(rract,nvdf)
+      subroutine printrract(rract,nvdf,hii)
          implicit none
 !        --------------------------------------------------------------
          integer,intent(in)       :: nvdf
          real*8,intent(in)        :: rract(nvdf)
+         real*8,intent(in)        :: hii(nvdf)
          integer                  :: nm
 !        --------------------------------------------------------------
          
