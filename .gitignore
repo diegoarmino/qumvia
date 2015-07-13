@@ -31,4 +31,8 @@ qumvia.cpu
 
 # Others
 compile_qva.bash
+<<<<<<< ca7201c565baf853fc3b091302c85e5bffa9d838
 bin/*
+=======
+bin
+>>>>>>> added bin folder to gitignore
