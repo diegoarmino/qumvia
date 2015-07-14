@@ -1885,7 +1885,7 @@ contains
 !     GENERATES GEOMETRIES FOR SEMINUMERICAL QFF USING HESSIANS
 !     TO BE COMPUTED USING AN EXTERNAL ELECTRONIC STRUCTURE SOFTWARE.
 !     ------------------------------------------------------------------
-      use garcha_mod
+!      use garcha_mod
       implicit none
 
       type(qva_nml_type), intent(in) :: qva_nml
@@ -1928,7 +1928,7 @@ contains
       integer             :: nat
       integer             :: an
       integer             :: i, j, k
-      integer             :: mm, nm, p
+      integer             :: ii, nm, p
       integer             :: step
       integer             :: dd(2)
       integer             :: openstatus,closestatus
@@ -1936,8 +1936,9 @@ contains
       & "Li","Be","B ","C ","N ","O ","F ","Ne","Na","Mg","Al","Si",&
       & "P ","S ","Cl","Ar","K ","Ca","Sc","Ti","V ","Cr","Mn","Fe",&
       & "Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr"/)
+      real*8,parameter    :: a0=0.5291771D00
     
-!      include "qvmbia_param.f"
+      include "qva_atmass_params.f90"
 
 !     Read geometry file.
       write(77,'(A)') 'READING GEOMETRY'
@@ -1951,6 +1952,15 @@ contains
       ngaus=16
       ndf=3*nqmatoms
       nvdf=ndf-6
+
+!     Create a vector of inverse square-root masses corresponding to each 
+!     cartesian coordinate.
+      do i=1,nqmatoms
+          do j=1,3
+              k=at_numbers(i)
+              atmass(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
+          end do
+      end do
 
       write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
       call hessian(qvageom,nqmatoms,at_numbers,nmodes,eig)
@@ -1983,8 +1993,12 @@ contains
       omega = Sqrt(hii)
       dQ = dy/Sqrt(omega)
 
-!       write(77,'(A)')'SCALE FACTOR FOR DISPLACEMENTS'
-!       write(77,'(99F15.10)') dQ
+!     ------------------------------------------------------------------
+!     DEBUG
+!     ------------------------------------------------------------------
+      write(77,'(A)')'SCALE FACTOR FOR DISPLACEMENTS'
+      write(77,'(99F15.10)') dQ
+!     ------------------------------------------------------------------
 
 
 !     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
@@ -1994,6 +2008,13 @@ contains
             Minv(3*(i-1)+j) = 1d0/sqrt(atmass(i))
          end do
       end do
+
+!     ------------------------------------------------------------------
+!     DEBUG
+!     ------------------------------------------------------------------
+      write(77,'(A)')'MASS WEIGHT MATRIX'
+      write(77,'(99F15.10)') Minv
+!     ------------------------------------------------------------------
 
 !-----------------------------------------------------------------------
 !     GENERATING STENCIL GEOMETRIES
@@ -2026,9 +2047,9 @@ contains
       do nm=1,nvdf
          do j=1,2
             do k=1,nqmatoms
-               do mm=1,3
-                  p = 3*(k-1)+mm
-                  dX(mm,k) = Minv(p)*L(p,nm)*dQ(nm)   ! Scaling/Mass unweighting
+               do ii=1,3
+                  p = 3*(k-1)+ii
+                  dX(ii,k) = Minv(p)*L(p,nm)*dQ(nm)   ! Scaling/Mass unweighting
                end do
             end do
             Xm = X0 + dd(j)*dX  ! Displacing along nmode
@@ -2062,31 +2083,31 @@ contains
 !           ------------------------------------------------------------
 !           HERE BEGINS TIMEDEPENDENT PART
 
-            timedep = 1
-            fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)
-            fxyz(2,:)=(/0d0,qva_nml%rri_fxyz,0d0/)
-            fxyz(3,:)=(/0d0,0d0,qva_nml%rri_fxyz/)
-
-            do i=1,3
-
-               Fx=fxyz(i,1)
-               Fy=fxyz(i,2)
-               Fz=fxyz(i,3)
-
-               E_mod=qva_nml%rri_fxyz*514.220652d0             ! Convert to V/nm
-               call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)   
-
-!              alpha(nmode,stencil_point,field_coord,dip_coord)
-               call rrtdanalyze('x.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
-               alphat(nm,j,i,1) = ABS(CMPLX(ftr,fti,8))/E_mod
-
-               call rrtdanalyze('y.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
-               alphat(nm,j,i,2) = ABS(CMPLX(ftr,fti,8))/E_mod
-
-               call rrtdanalyze('z.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
-               alphat(nm,j,i,3) = ABS(CMPLX(ftr,fti,8))/E_mod
-
-            end do
+!            timedep = 1
+!            fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)
+!            fxyz(2,:)=(/0d0,qva_nml%rri_fxyz,0d0/)
+!            fxyz(3,:)=(/0d0,0d0,qva_nml%rri_fxyz/)
+!
+!            do i=1,3
+!
+!               Fx=fxyz(i,1)
+!               Fy=fxyz(i,2)
+!               Fz=fxyz(i,3)
+!
+!               E_mod=qva_nml%rri_fxyz*514.220652d0             ! Convert to V/nm
+!               call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)   
+!
+!!              alpha(nmode,stencil_point,field_coord,dip_coord)
+!               call rrtdanalyze('x.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
+!               alphat(nm,j,i,1) = ABS(CMPLX(ftr,fti,8))/E_mod
+!
+!               call rrtdanalyze('y.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
+!               alphat(nm,j,i,2) = ABS(CMPLX(ftr,fti,8))/E_mod
+!
+!               call rrtdanalyze('z.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
+!               alphat(nm,j,i,3) = ABS(CMPLX(ftr,fti,8))/E_mod
+!
+!            end do
 !           END OF TD PART
 !           ------------------------------------------------------------
             step = step + 1
@@ -2102,15 +2123,15 @@ contains
 
 !     COMPUTE DERIVATIVES OF POLARIZABILITY VS NORMAL MODES
 !     ------------------------------------------------------------------
-      call derivate_alpha(alphat,dQ,dalpha,nvdf)
+!      call derivate_alpha(alphat,dQ,dalpha,nvdf)
       
 !     COMPUTE RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
-      call rractivity(dalpha,nvdf,rract)
+!      call rractivity(dalpha,nvdf,rract)
 
 !     PRINT RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
-      call printrract(rract,nvdf,hii)
+!      call printrract(rract,nvdf,hii)
 
       end subroutine
 
@@ -2247,6 +2268,9 @@ contains
           ftr = ftr + cos(2*pi*t*nu) * mu(j) * exp(-t*damps) ! real part w/ damp
           fti = fti + sin(2*pi*t*nu) * mu(j) * exp(-t*damps) ! imaginary part w/ damp
         enddo
+
+        ftr = ftr/(2d0*pi*nu)
+        fti = fti/(2d0*pi*nu)
 
       end subroutine 
 
