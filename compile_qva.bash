@@ -12,6 +12,6 @@ export QVA_HOME=${HOME}/dev/qumvia
 cd ${QVA_HOME}/src
 
 # Uncomment to compile CPU version only
-make cpu
+#make cpu
 # Uncomment to compile the LIO-compatible (GPU) version only
 make lio
