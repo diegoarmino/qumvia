@@ -1524,7 +1524,7 @@ contains
 !     GENERATES GEOMETRIES FOR SEMINUMERICAL QFF USING HESSIANS
 !     TO BE COMPUTED USING AN EXTERNAL ELECTRONIC STRUCTURE SOFTWARE.
 !     ------------------------------------------------------------------
-      use garcha_mod
+!      use garcha_mod
       implicit none
 
       type(lio_nml_type), intent(in) :: lio_nml
@@ -1569,7 +1569,7 @@ contains
       integer             :: rrdebug
       integer             :: an
       integer             :: i, j, k
-      integer             :: mm, nm, p
+      integer             :: ii, nm, p
       integer             :: step
       integer             :: dd(2)
       integer             :: openstatus,closestatus
@@ -1736,8 +1736,12 @@ contains
       omega = Sqrt(hii)
       dQ = dy/Sqrt(omega)
 
-!       write(77,'(A)')'SCALE FACTOR FOR DISPLACEMENTS'
-!       write(77,'(99F15.10)') dQ
+!     ------------------------------------------------------------------
+!     DEBUG
+!     ------------------------------------------------------------------
+      write(77,'(A)')'SCALE FACTOR FOR DISPLACEMENTS'
+      write(77,'(99F15.10)') dQ
+!     ------------------------------------------------------------------
 
 !     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
       do i=1,nqmatoms
@@ -1780,9 +1784,9 @@ contains
       do nm=1,nvdf
          do j=1,2
             do k=1,nqmatoms
-               do mm=1,3
-                  p = 3*(k-1)+mm
-                  dX(mm,k) = Minv(p)*L(p,nm)*dQ(nm)   ! Scaling/Mass unweighting
+               do ii=1,3
+                  p = 3*(k-1)+ii
+                  dX(ii,k) = Minv(p)*L(p,nm)*dQ(nm)   ! Scaling/Mass unweighting
                end do
             end do
             Xm = X0 + dd(j)*dX  ! Displacing along nmode
@@ -2263,6 +2267,9 @@ contains
 !           COMPUTE POLARIZABILITY TENSOR ELEMENTS
             spec(i)=2d0*ABS(CMPLX(ftrx,ftix,8))/(c*Emod*3d0)
          end do
+
+        ftr = ftr/(2d0*pi*nu)
+        fti = fti/(2d0*pi*nu)
 
       end subroutine 
 
