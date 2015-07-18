@@ -51,6 +51,10 @@
       integer :: doconfsel
       integer :: csdepth
       integer :: rraman
+      integer :: uvvis
+      integer :: lmin
+      integer :: lmax
+      integer :: readtd
       real*8  :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
@@ -94,6 +98,10 @@
           integer :: doconfsel
           integer :: csdepth
           integer :: rraman
+          integer :: uvvis
+          integer :: lmin
+          integer :: lmax
+          integer :: readtd
           real*8  :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
@@ -107,7 +115,7 @@
           namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
-          rraman,laserfreq,rrint_damp,rri_fxyz
+          rraman,laserfreq,rrint_damp,rri_fxyz,uvvis,lmin,lmax,readtd
        
           integer :: ifind, ierr
        
@@ -134,6 +142,10 @@
           laserfreq=500d0
           rrint_damp=0d0
           rri_fxyz=0.001d0
+          uvvis=0
+          lmin=100
+          lmax=900
+          readtd=0
        
        !  READ NAMELIST
        !  DANGER: Is it necessary to open file? I guess so.
@@ -171,6 +183,10 @@
           qva_nml%rraman=rraman
           qva_nml%rrint_damp=rrint_damp
           qva_nml%rri_fxyz=rri_fxyz
+          qva_nml%uvvis=uvvis
+          qva_nml%lmin=lmin
+          qva_nml%lmax=lmax
+          qva_nml%readtd=readtd
        
        end subroutine get_qva_nml
  
@@ -195,6 +211,10 @@
           write(77,'(A,I3)') '  doconfsel = ',qva_nml%doconfsel
           write(77,'(A,I3)') '  csdepth = ',qva_nml%csdepth
           write(77,'(A,I3)') '  rraman = ',qva_nml%rraman
+          write(77,'(A,I3)') '  uvvis = ',qva_nml%uvvis
+          write(77,'(A,I3)') '  lmin = ',qva_nml%lmin
+          write(77,'(A,I3)') '  lmax = ',qva_nml%lmax
+          write(77,'(A,I3)') '  readtd = ',qva_nml%readtd
           write(77,'(A,F7.2)') '  csiterfactor = ',qva_nml%csiterfactor
           write(77,'(A,F7.3)') '  vscf_gauswidth = ',qva_nml%vscf_gauswidth
           write(77,'(A,F7.0)') '  ethresh = ',qva_nml%ethresh
