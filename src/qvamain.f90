@@ -156,7 +156,7 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
    ELSE IF (qva_nml%nhess .eq. 3) THEN
 
 !     COMPUTE HARMONIC SPECTRA WITH RESONANT RAMAN INTENSITIES.
-      call rrintensities(qva_cli,qva_nml,nqmatoms)
+      call rrintensities(lio_nml,qva_cli,qva_nml,nqmatoms)
       STOP
 #endif
 

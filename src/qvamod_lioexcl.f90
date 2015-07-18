@@ -900,6 +900,7 @@ contains
       sign_eig=1.0D00
       at_masses=0.0D0
 
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 !     Create a vector of inverse square-root masses corresponding to each
 !     cartesian coordinate.
       do i=1,nqmatoms
@@ -916,6 +917,8 @@ contains
       end if
       grad=0.0D0
 
+=======
+>>>>>>> Added feature: Resonant Raman intensities
 !     Calculating energy and gradient at the initial geometry.
  !     PRINT THE GEOMETRY JUST READ
        write(77,'(A)') 'INPUT GEOMETRY'
@@ -1089,8 +1092,13 @@ contains
 
 !     Convert frequecies to wavenumbers
       do i = 1,ncoords
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
          freq(i) = sign(sign_eig(i),eig(i))*freq2cm*sqrt(abs(eig(i)))
       ENDDO
+=======
+         freq(i) = sign(sign_eig(i),eig(i))*h2cm*sqrt(abs(eig(i)))
+      end do
+>>>>>>> Added feature: Resonant Raman intensities
 
 !     Fix the phase of the eigenvectors
       call fixphase(hess,qmcoords,ncoords,nqmatoms)
@@ -1880,7 +1888,7 @@ contains
 
 
 
-      subroutine rrintensities(qva_cli,qva_nml,nqmatoms)
+      subroutine rrintensities(lio_nml,qva_cli,qva_nml,nqmatoms)
 !     ------------------------------------------------------------------
 !     GENERATES GEOMETRIES FOR SEMINUMERICAL QFF USING HESSIANS
 !     TO BE COMPUTED USING AN EXTERNAL ELECTRONIC STRUCTURE SOFTWARE.
@@ -1888,6 +1896,7 @@ contains
 !      use garcha_mod
       implicit none
 
+      type(lio_nml_type), intent(in) :: lio_nml
       type(qva_nml_type), intent(in) :: qva_nml
       type(qva_cli_type), intent(in) :: qva_cli
       integer,intent(in)  :: nqmatoms
@@ -1899,9 +1908,9 @@ contains
       integer             :: qva_extprog          ! External program gam=1,gaus=2
       integer             :: qumvia_nmc
       integer             :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
-      real*8              :: alphat(3*nqmatoms-6,2,3,3) ! Array of polarizabilities.
+      real*8              :: poltens(3*nqmatoms-6,2,3,3) ! Array of polarizabilities.
       real*8              :: dalpha(3*nqmatoms-6,3,3)     ! Derivatives of apha vs. nmodes
-      real*8              :: E_mod                ! Derivatives of apha vs. nmodes
+      real*8              :: Emod                ! Derivatives of apha vs. nmodes
       real*8              :: dy                   ! Step size factor dy. Default=0.5d0
       real*8              :: qvageom(3,nqmatoms)  ! QM atom coordinates
 
@@ -1924,8 +1933,9 @@ contains
       real*8              :: clcoords(4,nclatoms)
       real*8              :: fxyz(3,3)
       real*8              :: ftr,fti
-      real*8              :: rract(3*nqmatoms-6)
+      real*8              :: rract(3*nqmatoms-6)  ! should be C^2 m^2/(amu V^2)
       integer             :: nat
+      integer             :: rrdebug
       integer             :: an
       integer             :: i, j, k
       integer             :: ii, nm, p
@@ -1936,23 +1946,25 @@ contains
       & "Li","Be","B ","C ","N ","O ","F ","Ne","Na","Mg","Al","Si",&
       & "P ","S ","Cl","Ar","K ","Ca","Sc","Ti","V ","Cr","Mn","Fe",&
       & "Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr"/)
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
       real*8,parameter    :: a0=0.5291771D00
     
       include "qva_atmass_params.f90"
+=======
+      real*8,parameter    :: bohr2ang = 0.5291771D00         ! bohr radius
+
+      include "mass_params.f90"
+>>>>>>> Added feature: Resonant Raman intensities
 
 !     Read geometry file.
       write(77,'(A)') 'READING GEOMETRY'
       call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
 
-!     Some aliases
-      qumvia_nmc = qva_nml%qumvia_nmc
-      qva_extprog = qva_nml%qva_extprog
-      dy=qva_nml%qva_dstep
-
       ngaus=16
       ndf=3*nqmatoms
       nvdf=ndf-6
 
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 !     Create a vector of inverse square-root masses corresponding to each 
 !     cartesian coordinate.
       do i=1,nqmatoms
@@ -1962,11 +1974,129 @@ contains
           end do
       end do
 
+=======
+      if (qva_nml%uvvis == 1) then
+!        COMPUTING UV-VIS SPECTRA
+!        ------------------------------------------------------------------
+         call calc_uvvis(qvageom,qva_nml,lio_nml,nqmatoms)
+         STOP
+      end if 
+
+!     COMPUTING HARMONIC ANALYSIS
+!     ------------------------------------------------------------------
+>>>>>>> Added feature: Resonant Raman intensities
       write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
       call hessian(qvageom,nqmatoms,at_numbers,nmodes,eig)
       L=nmodes(:,7:ndf)
       hii=eig(7:ndf)
 
+      dy=qva_nml%qva_dstep
+      omega = Sqrt(hii)
+      dQ = dy/Sqrt(omega)
+
+!     MOVE GEOMS OVER NORMAL MODES AND COMPUTE TD
+!     ------------------------------------------------------------------
+      if (qva_nml%readtd==0) then
+         call calc_stencil_td(lio_nml,qva_nml,qva_cli,nqmatoms,qvageom,at_numbers,hii)
+      end if
+
+      Emod=qva_nml%rri_fxyz*514.220652d0             ! Convert to V/nm
+      rrdebug=1
+
+!     COMPUTING POLARIZABILITY TENSORS
+!     ------------------------------------------------------------------
+      write(77,'(A)') 'COMPUTING POLARIZABILITY TENSORS'
+      call calc_poltens(lio_nml%ntdstep,lio_nml%tdstep,qva_nml%laserfreq,&
+            & qva_nml%rrint_damp,nvdf,Emod,poltens)
+      if (rrdebug == 1) call print_poltens(poltens,nvdf)
+
+!     COMPUTE DERIVATIVES OF POLARIZABILITY VS NORMAL MODES
+!     ------------------------------------------------------------------
+      write(77,'(A)') 'COMPUTING DERIVATIVES WITH RESPECT TO NORMAL MODES'
+      call derivate_alpha(poltens,dQ,dalpha,nvdf)
+      if (rrdebug == 1) call print_derpoltens(dalpha,nvdf)
+      
+!     COMPUTE RESONANT RAMAN ACTIVITY
+!     ------------------------------------------------------------------
+      write(77,'(A)') 'COMPUTING RESONANT RAMAN ACTIVITIES'
+      call rractivity(dalpha,nvdf,rract)
+
+!     PRINT RESONANT RAMAN ACTIVITY
+!     ------------------------------------------------------------------
+      call printrract(rract,nvdf,hii)
+
+      end subroutine
+
+      subroutine calc_stencil_td(lio_nml,qva_nml,qva_cli,nqmatoms,qvageom,at_numbers,hii)
+!     ------------------------------------------------------------------
+!     GENERATES GEOMETRIES FOR SEMINUMERICAL QFF USING HESSIANS
+!     TO BE COMPUTED USING AN EXTERNAL ELECTRONIC STRUCTURE SOFTWARE.
+!     ------------------------------------------------------------------
+      use garcha_mod
+      implicit none
+
+      type(lio_nml_type), intent(in) :: lio_nml
+      type(qva_nml_type), intent(in) :: qva_nml
+      type(qva_cli_type), intent(in) :: qva_cli
+      integer,intent(in)  :: nqmatoms
+      real*8,intent(in)   :: qvageom(3,nqmatoms)  ! QM atom coordinates
+      integer,intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+      real*8,intent(in)   :: hii(3*nqmatoms-6)    ! Harmonic force constants.
+
+      integer,parameter   :: nclatoms=0
+      integer             :: ngaus
+      integer             :: ndf                  ! Number of deg of freedm (3*nqmatoms)
+      integer             :: nvdf                 ! Number of vib degrees of freedom (ndf-6)
+      integer             :: qva_extprog          ! External program gam=1,gaus=2
+      integer             :: qumvia_nmc
+      real*8              :: poltens(3*nqmatoms-6,2,3,3) ! Array of polarizabilities.
+      real*8              :: dalpha(3*nqmatoms-6,3,3)     ! Derivatives of apha vs. nmodes
+      real*8              :: Emod                ! Derivatives of apha vs. nmodes
+      real*8              :: dy                   ! Step size factor dy. Default=0.5d0
+
+      real*8              :: nmodes(3*nqmatoms,3*nqmatoms) ! mw Hessian eigenvectors.
+      real*8              :: freq(3*nqmatoms)     ! Harmonic frequencies
+      real*8              :: eig(3*nqmatoms)      ! Harmonic force constants.
+      real*8              :: atmass(nqmatoms)     ! Atomic masses
+      real*8              :: L(3*nqmatoms,3*nqmatoms-6)    ! Array of VIBRATIONAL nmodes.
+!      real*8              :: hii(3*nqmatoms-6)    ! Harmonic force constants.
+      real*8              :: omega(3*nqmatoms-6)  ! Harmonic frequencies omega(nm)=Sqrt(hii(nm))
+      real*8              :: X0(3,nqmatoms)       ! Initial geometry in cartesian and Angstroms.
+      real*8              :: Xm(3,nqmatoms)       ! Displaced geometry in cartesian and Angstroms.
+      real*8              :: dX(3,nqmatoms)       ! Displacement vector (cart and Angs).
+      real*8              :: dX1(3,nqmatoms)      ! Displacement vector (cart and Angs).
+      real*8              :: dQ(3*nqmatoms-6)     ! dQ(mode) = dy/Sqrt(omega_i) in Atomic units.
+      real*8              :: Mass(3*nqmatoms)     ! Sqrt mass weights matrix.
+      real*8              :: Minv(3*nqmatoms)     ! Inverse sqrt mass weights matrix.
+      real*8              :: escf                 ! Energy computed by SCF_in()
+      real*8              :: dipxyz(3)            ! Dipole moment computed by SCF_in()
+      real*8              :: clcoords(4,nclatoms)
+      real*8              :: fxyz(3,3)
+      integer             :: nat
+      integer             :: an
+      integer             :: i, j, k
+      integer             :: mm, nm, p
+      integer             :: step
+      integer             :: dd(2)
+      integer             :: openstatus,closestatus
+      character(len=2),dimension(36),parameter :: atsym=(/"H ","He",&
+      & "Li","Be","B ","C ","N ","O ","F ","Ne","Na","Mg","Al","Si",&
+      & "P ","S ","Cl","Ar","K ","Ca","Sc","Ti","V ","Cr","Mn","Fe",&
+      & "Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr"/)
+      real*8,parameter    :: bohr2ang = 0.5291771D00         ! bohr radius
+!      real*8              :: Fx,Fy,Fz
+!      integer             :: timedep
+
+      include "mass_params.f90"
+
+!     Some aliases
+      qumvia_nmc = qva_nml%qumvia_nmc
+      qva_extprog = qva_nml%qva_extprog
+      dy=qva_nml%qva_dstep
+
+      ngaus=16
+      ndf=3*nqmatoms
+      nvdf=ndf-6
 
 !     We define the step size acording to J.Chem.Phys 121:1383
 !     Using a dimensionless reduced coordinate y=sqrt(omega_i/hbar)Qi
@@ -2000,15 +2130,16 @@ contains
       write(77,'(99F15.10)') dQ
 !     ------------------------------------------------------------------
 
-
 !     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
       do i=1,nqmatoms
          do j=1,3
-            Mass(3*(i-1)+j) = sqrt(atmass(i))
-            Minv(3*(i-1)+j) = 1d0/sqrt(atmass(i))
+            k=at_numbers(i)
+            Mass(3*(i-1)+j) = sqrt_atomic_masses_au(k)
+            Minv(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
          end do
       end do
 
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 !     ------------------------------------------------------------------
 !     DEBUG
 !     ------------------------------------------------------------------
@@ -2016,11 +2147,14 @@ contains
       write(77,'(99F15.10)') Minv
 !     ------------------------------------------------------------------
 
+=======
+      write(77,*) 'BEFORE QVAGEOM'
+>>>>>>> Added feature: Resonant Raman intensities
 !-----------------------------------------------------------------------
 !     GENERATING STENCIL GEOMETRIES
 !-----------------------------------------------------------------------
 !     Converting units from Angstroms to Bohrs. 
-      X0=qvageom/a0
+      X0=qvageom/bohr2ang
 
 !     Calculating displaced coordinates and energy at 2 grid points 
 !     along each normal mode.
@@ -2038,7 +2172,7 @@ contains
 !     ------------------------------------------------------------
       write(77,'(A)') 'EQUILIBRIUM GEOMETRY (X0) (ANGS)'
       do i=1,nqmatoms
-         write(77,'(3F15.10)') X0(:,i)*a0
+         write(77,'(3F15.10)') X0(:,i)*bohr2ang
       end do
 !     ------------------------------------------------------------
 
@@ -2053,14 +2187,14 @@ contains
                end do
             end do
             Xm = X0 + dd(j)*dX  ! Displacing along nmode
-            Xm=Xm*a0            ! BACK TO ANGSTROMS
+            Xm=Xm*bohr2ang            ! BACK TO ANGSTROMS
 
 !           ------------------------------------------------------------
 !           DEBUG
 !           ------------------------------------------------------------
             write(77,'(A)') 'dX'
             do i=1,nqmatoms
-               write(77,'(3F15.10)') dd(j)*dX(:,i)*a0
+               write(77,'(3F15.10)') dd(j)*dX(:,i)*bohr2ang
             end do
             write(77,'(A)') 'DISPLACED GEOM'
             do i=1,nqmatoms
@@ -2081,6 +2215,7 @@ contains
             end do
 
 !           ------------------------------------------------------------
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 !           HERE BEGINS TIMEDEPENDENT PART
 
 !            timedep = 1
@@ -2109,18 +2244,34 @@ contains
 !
 !            end do
 !           END OF TD PART
+=======
+!           TIME DEPENDENT CALCULATION
+            timedep = 1
+            fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)
+            fxyz(2,:)=(/0d0,qva_nml%rri_fxyz,0d0/)
+            fxyz(3,:)=(/0d0,0d0,qva_nml%rri_fxyz/)
+
+            do i=1,3
+               Fx=fxyz(i,1)
+               Fy=fxyz(i,2)
+               Fz=fxyz(i,3)
+
+               call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)   
+            end do
+>>>>>>> Added feature: Resonant Raman intensities
 !           ------------------------------------------------------------
             step = step + 1
 
          end do
       end do
 
-      close(16,iostat=closestatus)
+      close(unit=14,iostat=closestatus)
       if (closestatus/=0) then
          write(77,'(A)') 'ERROR: COULD NOT CLOSE FILE'
          STOP
       end if
 
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 !     COMPUTE DERIVATIVES OF POLARIZABILITY VS NORMAL MODES
 !     ------------------------------------------------------------------
 !      call derivate_alpha(alphat,dQ,dalpha,nvdf)
@@ -2132,6 +2283,122 @@ contains
 !     PRINT RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
 !      call printrract(rract,nvdf,hii)
+=======
+      close(unit=16,iostat=closestatus)
+      if (closestatus/=0) then
+         write(77,'(A)') 'ERROR: COULD NOT CLOSE FILE'
+         STOP
+      end if
+
+      end subroutine
+
+
+
+      subroutine print_poltens(poltens,nvdf)
+         implicit none
+!        --------------------------------------------------------------
+         integer,intent(in)    :: nvdf
+         real*8,intent(in)     :: poltens(nvdf,2,3,3)
+
+         integer               :: nm,dd,i,j
+!        --------------------------------------------------------------
+
+         write(77,'(A)') '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+         write(77,'(A)') ' POLARIZABILITY TENSORS POLARIZABILITY TENSORS POLARIZABILITY TENSORS '
+         write(77,'(A)') '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+         do nm=1,nvdf
+            do dd=1,2
+            write(77,'(A,I4,A,I2)') 'MODE = ',nm,'STENCIL = ',dd
+               do i=1,3
+                  write(77,'(3D13.6)') poltens(nm,dd,i,:)
+               end do
+            end do
+         end do
+
+      end subroutine
+
+      subroutine print_derpoltens(dalpha,nvdf)
+         implicit none
+!        --------------------------------------------------------------
+         integer,intent(in)    :: nvdf
+         real*8,intent(in)     :: dalpha(nvdf,3,3)
+
+         integer               :: nm,i,j
+!        --------------------------------------------------------------
+
+         write(77,'(A)') '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+         write(77,'(A)') ' POLARIZABILITY TENSORS DERIVATIVES POLARIZABILITY TENSORS DERIVATIVES '
+         write(77,'(A)') '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+         do nm=1,nvdf
+            write(77,'(A,I4,A,I2)') 'MODE = ',nm
+            do i=1,3
+               write(77,'(3D13.6)') dalpha(nm,i,:)
+            end do
+         end do
+
+      end subroutine
+
+      subroutine calc_uvvis(qvageom,qva_nml,lio_nml,nqmatoms)
+         use garcha_mod
+         implicit none
+!        --------------------------------------------------------------
+         type(lio_nml_type), intent(in) :: lio_nml
+         type(qva_nml_type), intent(in) :: qva_nml
+         real*8,intent(in)              :: qvageom(3,nqmatoms)  ! QM atom coordinates
+         integer,intent(in)             :: nqmatoms
+
+         real*8,parameter    :: spl=299792458d0*1d9   !Speed o' light nm/s
+         integer,parameter   :: nclatoms=0
+
+         real*8              :: alphauv(10*(qva_nml%lmax-qva_nml%lmin))
+         real*8              :: spec(10*(qva_nml%lmax-qva_nml%lmin))
+         real*8              :: fxyz(3,3)
+         real*8              :: Emod
+         real*8              :: escf
+         real*8              :: clcoords(4,nclatoms)
+         real*8              :: dipxyz(3) 
+         real*8              :: lambda
+         integer             :: ierr
+         integer             :: i
+         integer             :: nvdf
+!        --------------------------------------------------------------
+
+         timedep = 1
+         nvdf=3*nqmatoms-6
+
+         fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)
+         fxyz(2,:)=(/0d0,qva_nml%rri_fxyz,0d0/)
+         fxyz(3,:)=(/0d0,0d0,qva_nml%rri_fxyz/)
+         Emod=qva_nml%rri_fxyz*514.220652d0             ! Convert to V/nm
+
+         if (qva_nml%readtd == 0) then
+            do i=1,3
+               Fx=fxyz(i,1)
+               Fy=fxyz(i,2)
+               Fz=fxyz(i,3)
+
+               call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)   
+            end do
+         end if
+
+         call uvtdanalyze(lio_nml%ntdstep,lio_nml%tdstep,qva_nml%lmin,&
+                 qva_nml%lmax,qva_nml%rrint_damp,nvdf,Emod,spec)
+
+         open(UNIT=99, FILE='uvvis.dat', ACTION='WRITE', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A,A)') 'COULD NOT OPEN FILE ','uvvis.dat'
+            STOP
+         end if
+
+         do i=1,10*(qva_nml%lmax-qva_nml%lmin)
+            lambda = dble((0.1*i) + qva_nml%lmin)
+            write(99,100) lambda, alphauv(i)
+         end do
+
+         close(unit=99)
+
+100      format (1x,F14.6,2x,F14.6)
+>>>>>>> Added feature: Resonant Raman intensities
 
       end subroutine
 
@@ -2141,7 +2408,10 @@ contains
          integer,intent(in)       :: nvdf
          real*8,intent(in)        :: rract(nvdf)
          real*8,intent(in)        :: hii(nvdf)
-         integer                  :: nm
+         integer                  :: nm,i
+         real*8                   :: sign_hii(nvdf)
+         real*8                   :: freq(nvdf)
+         real*8, PARAMETER        :: h2cm=219475.64d0 !Convert Hartree to cm-1
 !        --------------------------------------------------------------
          
          write(77,'(A)')
@@ -2150,8 +2420,16 @@ contains
          write(77,'(A)') ' RESONANT RAMAN ACTIVITIES S=45|a|^2 + 7|g|^2  '
          write(77,'(A)') ' --------------------------------------------  '
          write(77,'(A)') ' MODE     FREQUENCIES    RR ACTIVITIES         '
+
+!        Convert frequecies to wavenumbers
+
+         sign_hii=1.0D00
+         do nm = 1,nvdf
+            freq(nm) = sign(sign_hii(nm),hii(nm))*h2cm*sqrt(abs(hii(nm)))
+         end do
+
          do nm=1,nvdf
-            write(77,'(I3,F10.2,D18.6)') nm, hii(nm), rract(nm)
+            write(77,'(I3,F10.2,D18.6)') nm, freq(nm), rract(nm)
          end do
 
       end subroutine
@@ -2180,7 +2458,7 @@ contains
             anis(nm)=0.5d0*(y1+y2+y3+y4)
 
 !           RESONANT RAMAN ACTIVITY "S"
-            rract(nm)=45d0*isot(nm) + 7d0*anis(nm)
+            rract(nm)=45d0*isot(nm)**2 + 7d0*anis(nm)
 
 !           RESONANT RAMAN CROSS SECTION...
          end do
@@ -2202,24 +2480,25 @@ contains
          do nm=1,nvdf
             do i=1,3
                do j=1,3
-                  dalpha(nm,i,j)=(alpha(nm,2,i,j)-alpha(nm,1,i,j))*0.5d0/dQ(nm)
+                  dalpha(nm,i,j)=10*(alpha(nm,2,i,j)-alpha(nm,1,i,j))*0.5d0/dQ(nm)
+                  ! DANGER: FACTOR OF 10 TO CONVERT A TO NM IN NMODE.
                end do
             end do
          end do
 
       end subroutine
 
-      subroutine rrtdanalyze(traj,ns,ts,laserlambda,damp,ftr,fti)
+      subroutine calc_poltens(ns,ts,laserlambda,damp,nvdf,Emod,poltens)
          implicit none
 
 !        --------------------------------------------------------------
-         character(5),intent(in) :: traj  ! Trajectory file name.
          integer,intent(in)       :: ns    ! Number of steps.
+         integer,intent(in)       :: nvdf  ! Number of steps.
          real*8,intent(in)        :: ts    ! Time step (fs).
-         real*8,intent(in)        :: damp  ! Damping factor.
-         real*8,intent(in)        :: laserlambda  ! Resonant frequency.
-         real*8,intent(out)       :: fti 
-         real*8,intent(out)       :: ftr 
+         real*8,intent(in)        :: damp  ! Damping factor (1/fs).
+         real*8,intent(in)        :: laserlambda  ! Laser frequency (nm).
+         real*8,intent(in)        :: Emod  ! External field module (V/nm).
+         real*8,intent(out)       :: poltens(nvdf,2,3,3) ! Polarizability tensors
 
          real*8       :: nu
          real*8       :: t 
@@ -2228,46 +2507,208 @@ contains
          real*8       :: damps
          real*8       :: pi 
          real*8       :: lambda
+         real*8       :: ftix,ftiy,ftiz
+         real*8       :: ftrx,ftry,ftrz
+         real*8       :: tx,ty,tz
          integer      :: i, j, k
+         integer      :: nm,dd,fi
+         integer      :: step
+         integer      :: ierr
 
          real*8,parameter :: c=299792458d0*1d9   !Speed o' light nm/s
 
+         real*8, allocatable :: mux(:),muy(:),muz(:)
+!        --------------------------------------------------------------
+
+         allocate (mux(ns),muy(ns),muz(ns))
+
+         pi = 3.1415926535897932384626433832795d0
+         tss = ts * 2.418884326505d0 * 1.E-17 !conversion of time step to seconds
+         damps = damp * 1.E15
+
+!        DEBUG
+         write(77,'(A,D13.6)') 'Emod = ',Emod
+         write(77,'(A,D13.6)') 'timestep = ',tss
+
+!        OPEN TRAJECTORY FILES
+!        ---------------------------------------------------------------
+         open(UNIT=89, FILE='x.dip', ACTION='READ', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A)') 'COULD NOT OPEN FILE x.dip'
+            STOP
+         end if
+         open(UNIT=90, FILE='y.dip', ACTION='READ', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A)') 'COULD NOT OPEN FILE y.dip'
+            STOP
+         end if
+         open(UNIT=91, FILE='z.dip', ACTION='READ', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A)') 'COULD NOT OPEN FILE z.dip'
+            STOP
+         end if
+
+         nu =  c/laserlambda    ! nu in Hz, lambda in nm, c in nm/s
+         do nm=1,nvdf
+            do dd=1,2
+               do fi=1,3
+!                 ---------------------------------------------------------------
+!                 READ DIPOLES
+                  do step=1,ns
+                     read(89,*) tx, mux(step)
+                     read(90,*) ty, muy(step)
+                     read(91,*) tz, muz(step)
+                     if (tx/=ty .OR. tx/=tz .OR. ty/=tz) then
+                        write(77,'(A)') 'ERROR: TIME MISMATCH WHILE READING DIPOLES'
+                        write(77,'(I4,2I2,I5)') nm,dd,fi,step
+                        STOP
+                     end if
+                  end do
+!                 ---------------------------------------------------------------
+!                 DIFFERENTIATE
+                  do step=1,ns-1
+                     mux(step)=(mux(step+1)-mux(step))/tss
+                     muy(step)=(muy(step+1)-muy(step))/tss
+                     muz(step)=(muz(step+1)-muz(step))/tss
+                  end do
+!                 ---------------------------------------------------------------
+!                 FOURIER TRANSFORM
+                  t=0.0
+                  ftix = 0.0d0
+                  ftrx = 0.0d0
+                  ftiy = 0.0d0
+                  ftry = 0.0d0
+                  ftiz = 0.0d0
+                  ftrz = 0.0d0
+                  do j = 1,ns-1
+                    t = t + tss
+                    ftrx = ftrx + cos(2*pi*t*nu) * mux(j) * exp(-t*damps) ! real part w/ damp
+                    ftix = ftix + sin(2*pi*t*nu) * mux(j) * exp(-t*damps) ! imaginary part w/ damp
+
+                    ftry = ftry + cos(2*pi*t*nu) * muy(j) * exp(-t*damps) ! real part w/ damp
+                    ftiy = ftiy + sin(2*pi*t*nu) * muy(j) * exp(-t*damps) ! imaginary part w/ damp
+
+                    ftrz = ftrz + cos(2*pi*t*nu) * muz(j) * exp(-t*damps) ! real part w/ damp
+                    ftiz = ftiz + sin(2*pi*t*nu) * muz(j) * exp(-t*damps) ! imaginary part w/ damp
+                  enddo
+!                 ---------------------------------------------------------------
+!                 COMPUTE POLARIZABILITY TENSOR ELEMENTS
+                  write(77,'(A,2D13.6)') 'ftr = ',ftrx, ftix
+                  poltens(nm,dd,fi,1)=ABS(CMPLX(ftrx,ftix,8))/Emod
+                  poltens(nm,dd,fi,2)=ABS(CMPLX(ftry,ftiy,8))/Emod
+                  poltens(nm,dd,fi,3)=ABS(CMPLX(ftrz,ftiz,8))/Emod
+               end do
+            end do
+         end do
+
+         close(unit=89)
+         close(unit=90)
+         close(unit=91)
+
+      end subroutine 
+
+      subroutine uvtdanalyze(ns,ts,lmin,lmax,damp,nvdf,Emod,spec)
+         implicit none
+
+!        --------------------------------------------------------------
+         integer,intent(in)       :: ns    ! Number of steps.
+         integer,intent(in)       :: nvdf  ! Number of steps.
+         integer,intent(in)       :: lmin  ! Number of steps.
+         integer,intent(in)       :: lmax  ! Number of steps.
+         real*8,intent(in)        :: ts    ! Time step (fs).
+         real*8,intent(in)        :: damp  ! Damping factor (1/fs).
+         real*8,intent(in)        :: Emod  ! External field module (V/nm).
+         real*8,intent(out)       :: spec(ns) ! Polarizability tensors
+
+         real*8       :: nu
+         real*8       :: t 
+         real*8       :: tss
+         real*8       :: ene 
+         real*8       :: damps
+         real*8       :: pi 
+         real*8       :: lambda
+         real*8       :: ftix,ftiy,ftiz
+         real*8       :: ftrx,ftry,ftrz
+         real*8       :: tx,ty,tz
+         real*8       :: fti,ftr
+         integer      :: i, j, k
+         integer      :: nm,dd,fi
+         integer      :: step
+         integer      :: ierr
+
+         real*8,parameter :: c=299792458d0*1d9   !Speed o' light nm/s
+
+         real*8              :: mux,muy,muz
          real*8, allocatable :: mu(:)
 !        --------------------------------------------------------------
 
-         allocate (mu(1:ns))
+         allocate (mu(ns))
 
          pi = 3.1415926535897932384626433832795d0
-         tss = ts * 1.E-15 !conversion of time step to seconds
+         tss = ts * 2.418884326505d0 * 1.E-17 !conversion of time step to seconds
          damps = damp * 1.E15
 
-!        READING TRAJECTORY FILE
-         open(unit=88,file=traj)
-         do i = 1, ns
-           read(88,*) t, mu(i)
-         enddo
-         close(unit=88)
+!        OPEN TRAJECTORY FILES
+!        ---------------------------------------------------------------
+         open(UNIT=88, FILE='x.dip', ACTION='READ', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A)') 'COULD NOT OPEN FILE x.dip'
+            STOP
+         end if
+         open(UNIT=89, FILE='y.dip', ACTION='READ', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A)') 'COULD NOT OPEN FILE y.dip'
+            STOP
+         end if
+         open(UNIT=90, FILE='z.dip', ACTION='READ', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A)') 'COULD NOT OPEN FILE z.dip'
+            STOP
+         end if
 
-         do i = 1, ns-1
-            mu(i) = mu(i+1) - mu(i)  !takes differences
-            mu(i) = mu(i)/tss
+!        ---------------------------------------------------------------
+!        READ DIPOLES
+         mu=0d0
+         do fi=1,3
+            do step=1,ns
+               read(88,*) tx, mux
+               read(89,*) ty, muy
+               read(90,*) tz, muz
+               if (tx/=ty .OR. tx/=tz .OR. ty/=tz) then
+                  write(77,'(A)') 'ERROR: TIME MISMATCH WHILE READING DIPOLES'
+                  write(77,'(I4,2I2,I5)') nm,dd,fi,step
+                  STOP
+               end if
+               if (fi == 1) mu(step)=mu(step)+mux
+               if (fi == 2) mu(step)=mu(step)+muy
+               if (fi == 3) mu(step)=mu(step)+muz
+            end do
          end do
-
-!       ---------------------------------------------------------------
-!       FOURIER TRANSFORM
-
-
-        nu =  c/laserlambda    ! nu in Hz, lambda in nm, c in nm/s
-        
-        fti = 0.0d0
-        ftr = 0.0d0
-
-        t=0.0
-        do j = 1,ns-1
-          t = t + tss
-          ftr = ftr + cos(2*pi*t*nu) * mu(j) * exp(-t*damps) ! real part w/ damp
-          fti = fti + sin(2*pi*t*nu) * mu(j) * exp(-t*damps) ! imaginary part w/ damp
-        enddo
+         close(unit=88)
+         close(unit=89)
+         close(unit=90)
+!        ---------------------------------------------------------------
+!        DIFFERENTIATE
+         do step=1,ns-1
+            mu(step)=(mu(step+1)-mu(step))/tss
+         end do
+!        ---------------------------------------------------------------
+!        FOURIER TRANSFORM
+         do i = 1, 10*(lmax - lmin)
+            lambda = dble((0.1*i) + lmin)
+            nu = 3.0E17/lambda ! frequency computed in Hz
+            t=0.0
+            fti = 0.0d0
+            ftr = 0.0d0
+            do j = 1,ns-1
+              t = t + tss
+              ftr = ftr + cos(2*pi*t*nu) * mu(j) * exp(-t*damps) ! real part w/ damp
+              fti = fti + sin(2*pi*t*nu) * mu(j) * exp(-t*damps) ! imaginary part w/ damp
+            enddo
+!           ---------------------------------------------------------------
+!           COMPUTE POLARIZABILITY TENSOR ELEMENTS
+            spec(i)=2d0*ABS(CMPLX(ftrx,ftix,8))/(c*Emod*3d0)
+         end do
 
         ftr = ftr/(2d0*pi*nu)
         fti = fti/(2d0*pi*nu)

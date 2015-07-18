@@ -56,7 +56,14 @@
       integer :: hess_norder
 =======
       integer :: rraman
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 >>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
+=======
+      integer :: uvvis
+      integer :: lmin
+      integer :: lmax
+      integer :: readtd
+>>>>>>> Added feature: Resonant Raman intensities
       real*8  :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
@@ -109,7 +116,14 @@
           integer :: hess_norder
 =======
           integer :: rraman
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 >>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
+=======
+          integer :: uvvis
+          integer :: lmin
+          integer :: lmax
+          integer :: readtd
+>>>>>>> Added feature: Resonant Raman intensities
           real*8  :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
@@ -127,11 +141,15 @@
           namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 <<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
           nmorse,nsinh,hess_h,hess_norder
 =======
           rraman,laserfreq,rrint_damp,rri_fxyz
 >>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
+=======
+          rraman,laserfreq,rrint_damp,rri_fxyz,uvvis,lmin,lmax,readtd
+>>>>>>> Added feature: Resonant Raman intensities
        
           integer :: ifind, ierr
        
@@ -164,7 +182,14 @@
           laserfreq=500d0
           rrint_damp=0d0
           rri_fxyz=0.001d0
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 >>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
+=======
+          uvvis=0
+          lmin=100
+          lmax=900
+          readtd=0
+>>>>>>> Added feature: Resonant Raman intensities
        
        !  READ NAMELIST
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
@@ -207,7 +232,14 @@
           qva_nml%rraman=rraman
           qva_nml%rrint_damp=rrint_damp
           qva_nml%rri_fxyz=rri_fxyz
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 >>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
+=======
+          qva_nml%uvvis=uvvis
+          qva_nml%lmin=lmin
+          qva_nml%lmax=lmax
+          qva_nml%readtd=readtd
+>>>>>>> Added feature: Resonant Raman intensities
        
        end subroutine get_qva_nml
  
@@ -237,7 +269,14 @@
           write(77,'(A,I3)') '  hess_norder = ',qva_nml%hess_norder
 =======
           write(77,'(A,I3)') '  rraman = ',qva_nml%rraman
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 >>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
+=======
+          write(77,'(A,I3)') '  uvvis = ',qva_nml%uvvis
+          write(77,'(A,I3)') '  lmin = ',qva_nml%lmin
+          write(77,'(A,I3)') '  lmax = ',qva_nml%lmax
+          write(77,'(A,I3)') '  readtd = ',qva_nml%readtd
+>>>>>>> Added feature: Resonant Raman intensities
           write(77,'(A,F7.2)') '  csiterfactor = ',qva_nml%csiterfactor
           write(77,'(A,F7.3)') '  vscf_gauswidth = ',qva_nml%vscf_gauswidth
           write(77,'(A,F7.0)') '  ethresh = ',qva_nml%ethresh

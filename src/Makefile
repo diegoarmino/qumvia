@@ -9,6 +9,7 @@ BINDIR=../bin
 OBJDIR=../obj
 
 FC=ifort
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 <<<<<<< 8f89ea86e25185c5d553f4bcb7a1cc626cb9fd1b
 <<<<<<< cb52330281e84ee344e85760f1b200e1508f82b8
 FFLAGS= -O3 -ip -xHost -FR -I${MKL_HOME}/include
@@ -33,6 +34,15 @@ LIOFLAGS= -shared -I$(LIOINC) -I$(LIO_HOME)/lioamber
 #LIOFLAGS= -shared -I$(LIOINC) -I$(LIO_HOME)/lioamber
 LIOFLAGS= -I$(LIOINC) -I$(LIO_HOME)/lioamber
 >>>>>>> Fixed bug in Makefile: ditched -shared flag
+=======
+FFLAGS= -ip -xHost -FR -I$(MKL_HOME)/include 
+FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME)/lib/intel64
+LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(LIO_HOME)/g2g -lg2g -L$(LIO_HOME)/lioamber -llio-g2g
+LIOINC=$(LIO_HOME)/lioamber/obj
+#LIOFLAGS= -shared -I$(LIOINC) -I$(LIO_HOME)/lioamber
+#LIOFLAGS= -I$(LIOINC) -I$(LIO_HOME)/lioamber
+LIOFLAGS= -I$(LIO_HOME)/lioamber -I$(LIO_HOME)/lioamber/obj
+>>>>>>> Added feature: Resonant Raman intensities
 
 cpu: clean mkdirs qumvia.cpu mvdirs
 
@@ -54,7 +64,11 @@ qumvia.lio: M_kracken.o qvamod_common.o qvamod_lioexcl.o qvamod_lio.o qvamain_li
 >>>>>>> Added Resonant Raman Intesities code to qvamod_lioexcl
 =======
 	$(FC) $(FFLAGS) $(LIOFLAGS) -o $@ $^ $(LIOINC)/garcha_mod.o $(FLIBS) $(LIOLIBS)
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 >>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
+=======
+#	$(FC) $(FFLAGS) $(LIOFLAGS) -o $@ $^ $(FLIBS) $(LIOLIBS)
+>>>>>>> Added feature: Resonant Raman intensities
 
 #----------------------------------------------------------------------------------------
 # KRACKEN COMMAND LINE PARSER
@@ -85,8 +99,13 @@ qvamod_lioexcl.o: qvamod_common.mod qvamod_lioexcl.f90
 	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) $(LIOLIBS) -o qvamod_lioexcl.o
 =======
 	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) \
+<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 		$(LIOLIBS) -o qvamod_lioexcl.o $(LIOINC)/garcha_mod.o 
 >>>>>>> Debugged. Qumvia now compiles. Dont know if it works though
+=======
+		$(LIOLIBS) -o qvamod_lioexcl.o 
+#		$(LIOLIBS) -o qvamod_lioexcl.o $(LIOINC)/garcha_mod.o 
+>>>>>>> Added feature: Resonant Raman intensities
 
 qvamod_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_alt.f90
 	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_alt.f90 $(FLIBS) $(LIOLIBS) \

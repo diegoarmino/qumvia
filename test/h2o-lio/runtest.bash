@@ -1,3 +1,3 @@
 #!/bin/bash
 
-qumvia.cpu -i input.iqv -o test.oqv -c coordinates.cqv
+${QVA_HOME}/bin/qumvia.lio -i input.iqv -o output.oqv -c coordinates.cqv
