@@ -1937,8 +1937,7 @@ contains
 
       subroutine rrintensities(lio_nml,qva_cli,qva_nml,nqmatoms)
 !     ------------------------------------------------------------------
-!     COMPUTES RESONANT RAMAN INTENSITIES
-!
+!     COMPUTES RESONANT RAMAN ACTIVITIES USING RT-TDDFT
 !     Method based on the numerical diferentiation of polarizabilities obtained
 !     from RTTDDFT.
 !
@@ -2131,7 +2130,7 @@ contains
       integer             :: nat
       integer             :: an
       integer             :: i, j, k
-      integer             :: mm, nm, p
+      integer             :: ii, nm, p
       integer             :: step
       integer             :: dd(2)
       integer             :: openstatus,closestatus
@@ -2448,7 +2447,7 @@ contains
 
          do i=1,10*(qva_nml%lmax-qva_nml%lmin)
             lambda = dble((0.1*i) + qva_nml%lmin)
-            write(99,100) lambda, alphauv(i)
+            write(99,100) lambda, spec(i)
          end do
 
          close(unit=99)
@@ -2730,6 +2729,7 @@ contains
                read(88,*) tx, mux
                read(89,*) ty, muy
                read(90,*) tz, muz
+
                if (tx/=ty .OR. tx/=tz .OR. ty/=tz) then
                   write(77,'(A)') 'ERROR: TIME MISMATCH WHILE READING DIPOLES'
                   write(77,'(I4,2I2,I5)') nm,dd,fi,step
@@ -2763,7 +2763,7 @@ contains
             enddo
 !           ---------------------------------------------------------------
 !           COMPUTE POLARIZABILITY TENSOR ELEMENTS
-            spec(i)=2d0*ABS(CMPLX(ftrx,ftix,8))/(c*Emod*3d0)
+            spec(i)=2d0*ABS(CMPLX(ftr,fti,8))/(c*Emod*3d0)
          end do
 
         ftr = ftr/(2d0*pi*nu)
