@@ -1,4 +1,4 @@
-# Fortran compilation
+	# Fortran compilation
 
 # The following 3 variables must be set in order to compile qumvia.
 #HOME=/home/armino
@@ -30,7 +30,6 @@ qumvia.cpu: M_kracken.o qvamod_common.o qvamod_cpu.o qvamain_cpu.o
 
 qumvia.lio: M_kracken.o qvamod_common.o qvamod_lioexcl.o qvamod_lio.o qvamain_lio.o
 	$(FC) $(FFLAGS) $(LIOFLAGS) -o $@ $^ $(LIOINC)/garcha_mod.o $(FLIBS) $(LIOLIBS)
-#	$(FC) $(FFLAGS) $(LIOFLAGS) -o $@ $^ $(FLIBS) $(LIOLIBS)
 
 #----------------------------------------------------------------------------------------
 # KRACKEN COMMAND LINE PARSER
@@ -59,7 +58,6 @@ qvamain_cpu.o: qvamod_common.mod qvamod_cpu.mod qvamain.f90
 qvamod_lioexcl.o: qvamod_common.mod qvamod_lioexcl.f90
 	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) \
 		$(LIOLIBS) -o qvamod_lioexcl.o 
-#		$(LIOLIBS) -o qvamod_lioexcl.o $(LIOINC)/garcha_mod.o 
 
 qvamod_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_alt.f90 
 	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_alt.f90 $(FLIBS) $(LIOLIBS) \
