@@ -373,6 +373,7 @@ contains
        integer            :: bdim
        integer            :: trash
        integer            :: vscfstat
+       integer            :: nssref
        real*8             :: P(ngaus,ngaus,nvdf)  ! Modals coeficient matrices.
        real*8             :: Po(ngaus,ngaus,nvdf)  ! Modals coeficient matrices.
        real*8             :: Scho(ngaus,ngaus,nvdf)  ! Cholesky factor.
@@ -443,7 +444,14 @@ contains
                       &tijk,uiijk,uijjk,uijkk)
  
  !     COMPUTING VSCF/VCI OVER THESE CONFIGURATIONS      
-       do cnf=1,nrst
+
+       if (qva_nml%virt_csvci==.false.) then
+           nssref=nrst          ! State-specific vscf/vci
+       else
+           nssref=1             ! Virtual VCI (no vscf output)
+       end if 
+
+       do cnf=1,nssref
  !        Computing VSCF
           ref(:) = refstat(:,cnf)
           call ssvscf2(ref,nmodes,eig,dy,nmcoup,gwidth,nqmatoms,nclatoms,&
@@ -462,7 +470,8 @@ contains
           call csVCI2(qva_nml,ref,qumvia_nmc,ethresh,resthresh,selcut1,selcut2,&
                     &Po,Q1,Q2,Q3,Hcore,GDmtrx,GTmtrx,Scho,Emod,&
                     &hii,tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
-                    &nconf,ngaus,nvdf,qmaxx1,qmaxx2,qmaxx3,qmaxx4,bdim,Eref)
+                    &nconf,ngaus,nvdf,qmaxx1,qmaxx2,qmaxx3,qmaxx4,bdim,Eref,&
+                    &nrst,refstat)
           Evci(cnf)=Eref*h2cm
        end do
  

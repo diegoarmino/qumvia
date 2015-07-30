@@ -64,6 +64,7 @@
       real*8  :: laserfreq
       real*8  :: rrint_damp
       real*8  :: rri_fxyz
+      logical :: virt_csvci
     end type qva_nml_type
 
     type qva_cli_type
@@ -111,11 +112,12 @@
           real*8  :: laserfreq
           real*8  :: rrint_damp
           real*8  :: rri_fxyz
+          logical :: virt_csvci
        
           namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
-          rraman,laserfreq,rrint_damp,rri_fxyz,uvvis,lmin,lmax,readtd
+          rraman,laserfreq,rrint_damp,rri_fxyz,uvvis,lmin,lmax,readtd,virt_csvci
        
           integer :: ifind, ierr
        
@@ -146,6 +148,7 @@
           lmin=100
           lmax=900
           readtd=0
+          virt_csvci=.false.
        
        !  READ NAMELIST
        !  DANGER: Is it necessary to open file? I guess so.
@@ -187,6 +190,7 @@
           qva_nml%lmin=lmin
           qva_nml%lmax=lmax
           qva_nml%readtd=readtd
+          qva_nml%virt_csvci=virt_csvci
        
        end subroutine get_qva_nml
  
@@ -224,6 +228,7 @@
           write(77,'(A,D10.3)') '  selcut2 = ',qva_nml%selcut2
           write(77,'(A,D10.3)') '  rrint_damp = ',qva_nml%rrint_damp
           write(77,'(A,D10.3)') '  rri_fxyz = ',qva_nml%rri_fxyz
+          write(77,'(A,L)') '  virt_csvci = ',qva_nml%virt_csvci
           write(77,'(A)') ' -------------------------- '
           write(77,*) 
  
@@ -5893,7 +5898,8 @@
        subroutine csVCI2(qva_nml,ref,qumvia_nmc,ethresh,resthresh,selcut1,selcut2,&
                     &Po,Q1,Q2,Q3,Hcore,GDmtrx,GTmtrx,Scho,Emod,&
                     &hii,tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
-                    &nconf,ngaus,nvdf,qmaxx1,qmaxx2,qmaxx3,qmaxx4,bdim,Eref)
+                    &nconf,ngaus,nvdf,qmaxx1,qmaxx2,qmaxx3,qmaxx4,bdim,Eref,&
+                    &nrst,refstat)
  
  !     -----------------------------------------------------------------
  !     SINGLE REFERENCE VIRTUAL CONFIGURATION INTERACTION
@@ -5918,6 +5924,8 @@
        integer,intent(in)  :: qmaxx3 ! Max quantum number allowed for triples.
        integer,intent(in)  :: qmaxx4 ! Max quantum number allowed for quadruples
        integer,intent(in)  :: bdim  ! Dimension of operator matrices (qmaxx1+1 by default)
+       integer,intent(in)  :: nrst  ! Number of reference configurations.
+       integer,intent(in)  :: refstat(8,nrst) ! Reference configurations.
        real*8,intent(in)   :: ethresh    ! Energy threshold for CS (cm-1)
        real*8,intent(in)   :: resthresh  ! Resonance threshold
        real*8,intent(in)   :: Emod(ngaus,nvdf) ! VSCF modal energies.
@@ -6026,6 +6034,8 @@
  !        CONFIGURATION SELECTION
  !        -----------------------------------------------------------------
           nsc=1
+          if (qva_nml%virt_csvci == .true.) nsc=nrst
+             
           configs=0
           write(77,*)
           write(77,'(A)') 'STARTING RECURSIVE CONFIGURATION SELECTION  '
@@ -6034,10 +6044,14 @@
              if (i==1) cut=selcut1
              if (i>1) cut=csifac*cut
              write(77,'(A,I2,A,D10.3)') 'CUTOFF FOR ITERATION ',i,' = ',cut
-             call confsel(qmaxx1,qmaxx2,qmaxx3,qmaxx4,nvdf,nconf,configs,ngaus,&
+!             call confsel(qmaxx1,qmaxx2,qmaxx3,qmaxx4,nvdf,nconf,configs,ngaus,&
+!                  & nmods,qumvia_nmc,ref,nsc,cut,diag,ethresh,Emod,&
+!                  & Qm1,Qm2,Qm3,Hmc,GDm,GTm,hii,tiij,tjji,uiiij,ujjji,uiijj,&
+!                  & tijk,uiijk,uijjk,uijkk)
+             call confsel_vVCI(qmaxx1,qmaxx2,qmaxx3,qmaxx4,nvdf,nconf,configs,ngaus,&
                   & nmods,qumvia_nmc,ref,nsc,cut,diag,ethresh,Emod,&
                   & Qm1,Qm2,Qm3,Hmc,GDm,GTm,hii,tiij,tjji,uiiij,ujjji,uiijj,&
-                  & tijk,uiijk,uijjk,uijkk)
+                  & tijk,uiijk,uijjk,uijkk,nrst,refstat)
           end do
           write(77,'(A)') '------------------------------------------------------------'
           write(77,'(A,I15)') 'Configs after RECURSIVE CS =',nsc
@@ -6191,7 +6205,7 @@
                          &Qm1,Qm2,Qm3,Hmc,GDm,GTm,hii,tiij,tjji,uiiij,ujjji,uiijj,   &
                          &tijk,uiijk,uijjk,uijkk)
  !     -----------------------------------------------------------------
- !     THIS SUBROUTINE GENERATES ALL CI SINGLE AND DOUBLE CONFIGURATIONS
+ !     RECURSIVE CONFIGURATION SELECTION SUBROUTINE
  !     -----------------------------------------------------------------
        implicit none
  
@@ -6411,6 +6425,232 @@
  
  
  
+       subroutine confsel_vVCI(qmaxx1,qmaxx2,qmaxx3,qmaxx4,nvdf,nconf,configs,ngaus,&
+                         &nmods,qumvia_nmc,ref,stopcnf,pcecut,diag,ethresh,Emod,     &
+                         &Qm1,Qm2,Qm3,Hmc,GDm,GTm,hii,tiij,tjji,uiiij,ujjji,uiijj,   &
+                         &tijk,uiijk,uijjk,uijkk,nrst,refstat)
+ !     -----------------------------------------------------------------
+ !     RECURSIVE CONFIGURATION SELECTION FOR VIRTUAL VCI
+ !     -----------------------------------------------------------------
+       implicit none
+ 
+       integer,intent(in)   :: qmaxx1               ! Max excitation singles
+       integer,intent(in)   :: qmaxx2               ! Max excitation doubles
+       integer,intent(in)   :: qmaxx3               ! Max excitation triples
+       integer,intent(in)   :: qmaxx4               ! Max excitation quadruples
+       integer,intent(in)   :: nvdf                ! No of vibrational dof.
+       integer,intent(in)   :: nconf               ! CI basis set size.
+       integer,intent(in)   :: nmods
+       integer,intent(in)   :: ngaus
+       integer,intent(in)   :: qumvia_nmc
+       integer,intent(in)   :: ref(8)
+       integer,intent(in)   :: nrst
+       integer,intent(in)   :: refstat(8,nrst)
+       integer,intent(inout):: stopcnf
+       integer,intent(inout):: configs(8,nconf)
+ 
+       real*8,intent(in)    :: pcecut
+       real*8,intent(inout) :: diag(nconf)
+ 
+       real*8,intent(in)    :: ethresh
+       real*8,intent(in)    :: Emod(ngaus,nvdf)       ! Modal energies.
+       real*8,intent(in)    :: Qm1(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm2(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm3(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Hmc(nmods,nmods,nvdf)
+       real*8,intent(in)    :: GDm(nmods,nmods,nvdf)
+       real*8,intent(in)    :: GTm(nmods,nmods,nvdf)
+ 
+       real*8,intent(in)    :: hii(nvdf)
+       real*8,intent(in)    :: tiij(nvdf,nvdf)
+       real*8,intent(in)    :: tjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiiij(nvdf,nvdf)
+       real*8,intent(in)    :: ujjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiijj(nvdf,nvdf)
+       real*8,intent(in)    :: tijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uiijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijjk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijkk(nvdf,nvdf,nvdf)
+ 
+       integer    :: i,j
+       integer    :: nc
+       integer    :: nm
+       integer    :: qn
+       integer    :: nm1
+       integer    :: nm2
+       integer    :: nm3
+       integer    :: nm4
+       integer    :: qn1
+       integer    :: qn2
+       integer    :: qn3
+       integer    :: qn4
+       integer    :: conf(8)
+       real*8     :: zpe
+       real*8     :: ecut
+       real*8     :: hoe
+       real*8     :: hof(nvdf)
+       real*8     :: Ediag
+       real*8     :: Erefho
+       real*8     :: Edho
+ 
+       real*8, parameter :: h2cm=219475.64d0  ! Convert Hartree to cm-1
+ !     -----------------------------------------------------------------
+ 
+ !     Compute Harmoni Oscillator frequencies in cm-1
+       hof=sqrt(abs(hii))*h2cm  
+ 
+ !     Compute Harmonic Oscillator zero point energy
+       zpe=0d0
+       do i=1,nvdf
+          zpe=zpe+hof(i)/2d0
+       end do
+!       write(77,'(A,D15.5)') 'ZERO POINT ENERGY = ',zpe
+ 
+ !     -----------------------------------------------------------------
+ !     VSCF REFERENCE STATE
+ !     -----------------------------------------------------------------
+       nc=0
+       if (stopcnf == nrst) then
+          do i=1,nrst
+             conf=refstat(:,i)
+             Ediag=0d0
+             Erefho=0d0
+             call calcHOE(conf,nvdf,zpe,hof,Erefho)
+             call diagCIme(conf,qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,&
+                      &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                      &nvdf,ngaus,nmods,nconf,Ediag)
+             diag(i)=Ediag
+             configs(:,i)=refstat(:,i)
+          end do
+          ecut=Erefho+ethresh
+       else
+          conf=refstat(:,nrst)
+          Erefho=0d0
+          call calcHOE(conf,nvdf,zpe,hof,Erefho)
+          ecut=Erefho+ethresh
+       end if
+!       write(77,'(A,D15.6)') 'ENERGY CUTOFF FOR CS IS ',ecut
+ 
+ !     GROUND STATE
+ !     -----------------------------------------------------------------
+       conf=0
+       if ( .NOT. equal(ref,conf) ) then
+          call calcHOE(conf,nvdf,zpe,hof,Edho)
+          call tester(nc,nconf,conf,stopcnf,pcecut,hof,zpe,configs,diag,ethresh,&
+               &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,Edho,&
+               &qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,nvdf,nmods,ngaus)
+       end if
+ 
+ !     FUNDAMENTALS
+ !     -----------------------------------------------------------------
+       do nm=1,nvdf
+          conf = (/nm,1,0,0,0,0,0,0/)
+          if ( equal(ref,conf) ) CYCLE
+          call calcHOE(conf,nvdf,zpe,hof,Edho)
+          call tester(nc,nconf,conf,stopcnf,pcecut,hof,zpe,configs,diag,ethresh,&
+               &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,Edho,&
+               &qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,nvdf,nmods,ngaus)
+       end do
+ 
+ !     OVERTONES
+ !     -----------------------------------------------------------------
+       do nm=1,nvdf
+          do qn=2,qmaxx1
+             conf = (/nm,qn,0,0,0,0,0,0/)
+             if ( equal(ref,conf) ) CYCLE
+             call calcHOE(conf,nvdf,zpe,hof,Edho)
+ !            write(77,'(A)') 'OVERTONES HO ENERGIES'
+ !            write(77,'(8I4,D15.6)') conf,Edho
+             if ( Edho > ecut ) CYCLE
+             call tester(nc,nconf,conf,stopcnf,pcecut,hof,zpe,configs,diag,ethresh,&
+                  &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,Edho,&
+                  &qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,nvdf,nmods,ngaus)
+          end do
+       end do
+ 
+ 
+ !     DOUBLES
+ !     -----------------------------------------------------------------
+       do nm1=1,nvdf-1
+          do nm2=nm1+1,nvdf
+             do qn1=1,qmaxx2
+                do qn2=1,qmaxx2
+                   conf=(/nm1,qn1,nm2,qn2,0,0,0,0/)
+                   if ( equal(ref,conf) ) CYCLE
+                   call calcHOE(conf,nvdf,zpe,hof,Edho)
+                   if ( Edho > ecut ) CYCLE
+                   call tester(nc,nconf,conf,stopcnf,pcecut,hof,zpe,configs,diag,ethresh,&
+                        &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,Edho,&
+                        &qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,nvdf,nmods,ngaus)
+                end do
+             end do
+          end do
+       end do
+ 
+ !     TRIPLES
+ !     -----------------------------------------------------------------
+       do nm1=1,nvdf-2
+          do nm2=nm1+1,nvdf-1
+             do nm3=nm2+1,nvdf
+                do qn1=1,qmaxx3
+                   do qn2=1,qmaxx3
+                      do qn3=1,qmaxx3
+                         conf=(/nm1,qn1,nm2,qn2,nm3,qn3,0,0/)
+                         if ( equal(ref,conf) ) CYCLE
+                         call calcHOE(conf,nvdf,zpe,hof,Edho)
+                         if ( Edho > ecut ) CYCLE
+                         call tester(nc,nconf,conf,stopcnf,pcecut,hof,zpe,configs,diag,ethresh,&
+                              &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,Edho,&
+                              &qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,nvdf,nmods,ngaus)
+                      end do
+                   end do
+                end do
+             end do
+          end do
+       end do
+ 
+       if (nvdf<4) then
+          stopcnf=stopcnf+nc
+          RETURN
+       end if
+          
+ 
+ !     QUADRUPLES
+ !     -----------------------------------------------------------------
+       do nm1=1,nvdf-3
+          do nm2=nm1+1,nvdf-2
+             do nm3=nm2+1,nvdf-1
+                do nm4=nm3+1,nvdf
+                   do qn1=1,qmaxx4
+                      do qn2=1,qmaxx4
+                         do qn3=1,qmaxx4
+                            do qn4=1,qmaxx4
+                               conf=(/nm1,qn1,nm2,qn2,nm3,qn3,nm4,qn4/)
+                               if ( equal(ref,conf) ) CYCLE
+                               call calcHOE(conf,nvdf,zpe,hof,Edho)
+                               if ( Edho > ecut ) CYCLE
+                               call tester(nc,nconf,conf,stopcnf,pcecut,hof,zpe,configs,diag,ethresh,&
+                                    &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,Edho,&
+                                    &qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,nvdf,nmods,ngaus)
+                            end do
+                         end do
+                      end do
+                   end do
+                end do
+             end do
+          end do
+       end do
+ 
+ 
+ !     TOTAL NUMBER OF SELECTED CONFIGURATIONS
+ !     -----------------------------------------------------------------
+       stopcnf=stopcnf+nc
+ 
+ !     WRITE UPDATE
+ !     -----------------------------------------------------------------
+       write(77,'(I15,A)') nc,' SELECTED CONFIGURATIONS IN THIS ROUND OF RSC'
+ 
+       end subroutine
  
        subroutine tester(nc,nconf,conf,stopcnf,pcecut,hof,zpe,configs,diag,ethresh,&
                         &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,Edho,&
