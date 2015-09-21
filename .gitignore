@@ -31,3 +31,4 @@ qumvia.cpu
 
 # Others
 compile_qva.bash
+bin/*
