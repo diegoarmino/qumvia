@@ -373,6 +373,7 @@ contains
        integer            :: bdim
        integer            :: trash
        integer            :: vscfstat
+       real*8             :: alpha(nvdf)
        real*8             :: P(ngaus,ngaus,nvdf)  ! Modals coeficient matrices.
        real*8             :: Po(ngaus,ngaus,nvdf)  ! Modals coeficient matrices.
        real*8             :: Scho(ngaus,ngaus,nvdf)  ! Cholesky factor.
@@ -441,6 +442,12 @@ contains
                       &qmcoords,clcoords,at_numbers,ndf,nvdf,&
                       &hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,uiijj,&
                       &tijk,uiijk,uijjk,uijkk)
+
+ !     CONVERT QFF IF MORSE OR SINH COORDINATES ARE REQUIRED.
+       if (qva_nml%nmorse /= 0 .OR. qva_nml%nsinh /= 0) then
+          call convertQFF(qva_nml,nvdf,hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,&
+                           & uiijj,tijk,uiijk,uijjk,uijkk,alpha)
+       end if
  
  !     COMPUTING VSCF/VCI OVER THESE CONFIGURATIONS      
        do cnf=1,nrst
@@ -450,7 +457,7 @@ contains
                     &ngaus,qmcoords,clcoords,at_numbers,ndf,nvdf,&
                     &P,Po,Scho,Evscf,Q1,Q2,Q3,Hcore,GDmtrx,GTmtrx,Emod,&
                     &hii,tiii,uiiii,tiij,tjji,uiiij,ujjji,uiijj,&
-                    &tijk,uiijk,uijjk,uijkk,vscfstat)
+                    &tijk,uiijk,uijjk,uijkk,vscfstat,qva_nml,alpha)
           if (vscfstat /=0) CYCLE
           Essvhf(cnf)=Evscf
           Pss(:,cnf)=P(:,cnf,cnf)

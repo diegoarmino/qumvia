@@ -135,7 +135,7 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
       lio_nml%propagator, lio_nml%writedens, lio_nml%tdrestart)
    deallocate(at_numbers,qvageom)
 #endif
-   close(unit=10)
+!   close(unit=10)
 
    IF (qva_nml%nhess .eq. 1) THEN
 

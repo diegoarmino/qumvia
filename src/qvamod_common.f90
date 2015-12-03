@@ -35,7 +35,7 @@
     public :: geoms4qff,get_qva_nml,readnqmatoms,qva_nml_type, &
            &  readgeom, readgaunmodes, readqff, readgamessqff, &
            &  hseminumqff, readaddref, genconf3, print_qva_nml,&
-           &  ssvscf2, csVCI2,qva_cli_type
+           &  ssvscf2, csVCI2,qva_cli_type,convertQFF
  
     type qva_nml_type
       integer :: nhess
@@ -50,6 +50,8 @@
       integer :: qva_extprog
       integer :: doconfsel
       integer :: csdepth
+      integer :: nmorse
+      integer :: nsinh
       real*8  :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
@@ -89,6 +91,8 @@
           integer :: qva_extprog
           integer :: doconfsel
           integer :: csdepth
+          integer :: nmorse
+          integer :: nsinh
           real*8  :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
@@ -98,7 +102,8 @@
        
           namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
-          resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog
+          resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
+          nmorse,nsinh
        
           integer :: ifind, ierr
        
@@ -121,9 +126,10 @@
           doconfsel=1
           csdepth=2
           csiterfactor=10d0
+          nmorse=0
+          nsinh=0
        
        !  READ NAMELIST
-       !  DANGER: Is it necessary to open file? I guess so.
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
           if (ierr /= 0) then
              write(*,*) 'ERROR OPENNING INPUT FILE'
@@ -154,6 +160,8 @@
           qva_nml%doconfsel=doconfsel
           qva_nml%csdepth=csdepth
           qva_nml%csiterfactor=csiterfactor
+          qva_nml%nmorse=nmorse
+          qva_nml%nsinh=nsinh
        
        end subroutine get_qva_nml
  
@@ -177,6 +185,8 @@
           write(77,'(A,I3)') '  qva_extprog = ',qva_nml%qva_extprog
           write(77,'(A,I3)') '  doconfsel = ',qva_nml%doconfsel
           write(77,'(A,I3)') '  csdepth = ',qva_nml%csdepth
+          write(77,'(A,I3)') '  nmorse = ',qva_nml%nmorse
+          write(77,'(A,I3)') '  nsinh = ',qva_nml%nsinh
           write(77,'(A,F7.2)') '  csiterfactor = ',qva_nml%csiterfactor
           write(77,'(A,F7.3)') '  vscf_gauswidth = ',qva_nml%vscf_gauswidth
           write(77,'(A,F7.0)') '  ethresh = ',qva_nml%ethresh
@@ -504,6 +514,319 @@
  !     FORCE FIELD SECTION
  !######################################################################
        
+       subroutine convertQFF(qva_nml,nvdf,hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,&
+                           & uiijj,tijk,uiijk,uijjk,uijkk,alpha)
+ !     ------------------------------------------------------------------
+ !     CONVERTS THE QFF TO MORSE AND/OR SINH COORDINATES IN THE 
+ !     APPROPIATE DEGREES OF FREEDOM
+ !     ------------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type), intent(in)  :: qva_nml  ! QUMVIA namelist parameters
+       integer, intent(in) :: nvdf                 ! Number of vib degrees of freedom (ndf-6)
+       real*8, intent(inout) :: hii(nvdf)           ! Diagonal cubic coupling terms
+       real*8, intent(inout) :: tiii(nvdf)           ! Diagonal cubic coupling terms
+       real*8, intent(inout) :: uiiii(nvdf)          ! Diagonal quartic coupling terms
+       real*8, intent(inout) :: tiij(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8, intent(inout) :: tjji(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8, intent(inout) :: uiiij(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8, intent(inout) :: ujjji(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8, intent(inout) :: uiijj(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8, intent(inout) :: tijk(nvdf,nvdf,nvdf)      ! 3-mode cubic coupling terms
+       real*8, intent(inout) :: uiijk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8, intent(inout) :: uijjk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8, intent(inout) :: uijkk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8, intent(out) :: alpha(nvdf)         ! Derivatives of the coordinate.
+ 
+!      LOCAL VARIABLES
+!      Temporary converted QFF parameters -----------------------------------------------
+       real*8              :: chii(nvdf)           ! Diagonal cubic coupling terms
+       real*8              :: ctiii(nvdf)           ! Diagonal cubic coupling terms
+       real*8              :: cuiiii(nvdf)          ! Diagonal quartic coupling terms
+       real*8              :: ctiij(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8              :: ctjji(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8              :: cuiiij(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8              :: cujjji(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8              :: cuiijj(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8              :: ctijk(nvdf,nvdf,nvdf)      ! 3-mode cubic coupling terms
+       real*8              :: cuiijk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8              :: cuijjk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8              :: cuijkk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+!      Temporary converted QFF parameters -----------------------------------------------
+!      Other local variables.
+       real*8              :: dcrd(nvdf,4)         ! Derivatives of the coordinate.
+       real*8              :: tmp1
+       real*8              :: tmp2
+       real*8              :: tmp3
+       real*8              :: aa
+       integer             :: ierr
+       integer             :: i, j, k
+       integer             :: m, nm, p
+       integer             :: nm1, nm2, nm3
+       integer             :: nmorse, nsinh
+       integer,allocatable :: morsemods(:), sinhmods(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac
+     
+       include "qvmbia_param.f"
+       write(77,'(A)')'------------------------------------------------------------------------' 
+       write(77,'(A)')'        CONVERTING THE QFF INTO MORSE/SINH COORDINATES            ' 
+       write(77,'(A)')'------------------------------------------------------------------------' 
+ 
+ !-----------------------------------------------------------------------
+ !     COMPUTE ALPHA FACTORS AND DERIVATIVES FOR ALL DEGREES OF FREEDOM
+ !     FOR WHICH A CONVERSION TO NEW COORDINATES IS REQUIRED. 
+ !     CONVERSION OF COORDINATES INTO MORSE OR SINH COORDS IS
+ !     ACHIEVED THROUGH THE USE OF THE CHAIN RULE.
+ !-----------------------------------------------------------------------
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+
+!      READING LIST OF NORMAL MODES INTO WHICH TO APPLY MORSE AND/OR SINH COORDS.
+!      THE LIST IS READ FROM A NAMELIST CALLED 'AUXCOORDS' INSIDE THE QUMVIA 
+!      COMMANDS INPUT FILE ALONGSIDE THE &QVA AND (POSSIBLY) &LIO NAMELISTS.
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST')
+       end if
+
+       write(77,'(A,99F12.3)') 'CORRECTION COEFFICIENTS FOR ALPHA ',afac
+
+       if (nmorse > 0) then
+          write(77,'(A)') 'MORSE COORDINATES WILL BE APPLIED TO NORMAL MODES: '
+          write(77,'(99I3)') morsemods
+       end if 
+       if (nsinh > 0) then
+          write(77,'(A)') 'SINH COORDINATES WILL BE APPLIED TO NORMAL MODES: '
+          write(77,'(99I3)') sinhmods
+       end if
+       
+       dcrd(:,1)=1d0
+       dcrd(:,2:4)=0d0
+
+!      MORSE COORDINATES
+       do i=1,nmorse
+          nm=morsemods(i)
+          aa=-afac(nm)*tiii(nm)/(3d0*hii(nm)) ! Alpha factor for MORSE coords.
+          if (aa<0d0 ) then
+             write(77,'(A,I3)') 'WARNING!: ALPHA IS NEGATIVE FOR NORMAL MODE ',nm
+          end if
+          dcrd(nm,1)=aa
+          dcrd(nm,2)=-aa**2
+          dcrd(nm,3)=aa**3
+          dcrd(nm,4)=-aa**4
+       end do
+
+!      SINH COORDINATES
+       do i=1,nsinh
+          nm=sinhmods(i)
+          if (uiiii(nm)/hii(nm) < 0) write(77,'(A,I3,A)') 'WARNING: ALPHA FOR MODE ',nm,'IS MAGINARY'
+          aa=afac(nm)*Sqrt(Abs(uiiii(nm)/(4d0*hii(nm)))) ! Alpha factor for SINH coords.
+          dcrd(nm,1)=aa
+          dcrd(nm,2)=0d0
+          dcrd(nm,3)=aa**3
+          dcrd(nm,4)=0d0
+       end do
+ 
+!      COPY ALPHA FACTORS INTO AN OUTPUT VARIABLE
+       alpha(:) = dcrd(:,1)
+       write(77,'(A)') 'ALPHA'
+       write(77,'(99D15.8)') alpha
+       write(77,'(A)') 'DERIVATIVES OF R(Q) WITH RESPECT TO Q'
+       do i=1,4
+          write(77,'(99D15.8)') dcrd(:,i)
+       end do
+
+ !-----------------------------------------------------------------------
+ !     DIAGONAL QFF TERMS
+ !-----------------------------------------------------------------------
+       do nm=1,nvdf
+          chii(nm)=hii(nm)/dcrd(nm,1)**2
+
+          tmp1=tiii(nm)*dcrd(nm,1)
+          tmp2=-3d0*hii(nm)*dcrd(nm,2)
+          ctiii(nm)=(tmp1+tmp2)/dcrd(nm,1)**4
+          
+          tmp1= uiiii(nm)/(dcrd(nm,1)**4)
+          tmp2= -6d0 * tiii(nm) * dcrd(nm,2) / dcrd(nm,1)**5
+          tmp3= 15 * dcrd(nm,2)**2 - 4d0 * dcrd(nm,1) * dcrd(nm,3)
+          tmp3= hii(nm) * tmp3 / dcrd(nm,1)**6
+          cuiiii(nm)=tmp1+tmp2+tmp3
+       end do
+       
+ !-----------------------------------------------------------------------
+ !     2-MODE COUPLING QFF TERMS
+ !-----------------------------------------------------------------------
+       do nm1=1,nvdf-1
+          do nm2=nm1+1,nvdf
+ 
+ !           TIIJ
+ !           -----------------------------------------------------------
+             tmp1=0d0
+             tmp1=(dcrd(nm1,1)**2)*dcrd(nm2,1)
+             ctiij(nm1,nm2)=tiij(nm1,nm2)/tmp1
+ 
+ !           TJJI
+ !           -----------------------------------------------------------
+             tmp1=0d0
+             tmp1=dcrd(nm1,1)*dcrd(nm2,1)**2
+             ctjji(nm1,nm2)=tjji(nm1,nm2)/tmp1
+ 
+ !           UIIIJ
+ !           -----------------------------------------------------------
+             tmp1=0d0
+             tmp2=0d0
+
+             tmp1=(dcrd(nm1,1)**3)*dcrd(nm2,1)
+             tmp1=uiiij(nm1,nm2)/tmp1
+
+             tmp2=(dcrd(nm1,1)**4)*dcrd(nm2,1)
+             tmp2=-3d0*tiij(nm1,nm2)*dcrd(nm1,2)/tmp2
+
+             cuiiij(nm1,nm2)=tmp1+tmp2
+               
+ !           UJJJI
+ !           -----------------------------------------------------------
+             tmp1=0d0
+             tmp2=0d0
+
+             tmp1=dcrd(nm1,1)*dcrd(nm2,1)**3
+             tmp1=ujjji(nm1,nm2)/tmp1
+
+             tmp2=dcrd(nm1,1)*dcrd(nm2,1)**4
+             tmp2=-3d0*tjji(nm1,nm2)*dcrd(nm2,2)/tmp2
+
+             cujjji(nm1,nm2)=tmp1+tmp2
+               
+ !           UIIJJ
+ !           -----------------------------------------------------------
+             tmp1=0d0
+             tmp2=0d0
+             tmp3=0d0
+
+             tmp1=dcrd(nm1,1)**2 * dcrd(nm2,1)**2
+             tmp1=uiijj(nm1,nm2)/tmp1
+
+             tmp2=dcrd(nm1,1)**3 * dcrd(nm2,1)**2
+             tmp2=-tjji(nm1,nm2)*dcrd(nm1,2)/tmp2
+
+             tmp3=dcrd(nm1,1)**2 * dcrd(nm2,1)**3
+             tmp3=-tiij(nm1,nm2)*dcrd(nm2,2)/tmp3
+
+             cuiijj(nm1,nm2)=tmp1+tmp2+tmp3
+ 
+          end do 
+       end do
+ 
+ !-----------------------------------------------------------------------
+ !     THREE MODES COUPLING TERMS
+ !-----------------------------------------------------------------------
+       do nm1=1,nvdf-2
+          do nm2=nm1+1,nvdf-1
+             do nm3=nm2+1,nvdf
+ 
+ !              TIJK
+ !              ---------------------------------------------------------
+                tmp1=0d0
+                tmp1=dcrd(nm1,1)*dcrd(nm2,1)*dcrd(nm3,1)
+                ctijk(nm1,nm2,nm3)=tijk(nm1,nm2,nm3)/tmp1
+ 
+              
+ !              UIIJK
+ !              ---------------------------------------------------------
+                tmp1=0d0
+                tmp2=0d0
+                tmp1=dcrd(nm1,1)**2*dcrd(nm2,1)*dcrd(nm3,1)
+                tmp1=uiijk(nm1,nm2,nm3)/tmp1
+                tmp2=dcrd(nm1,1)**3*dcrd(nm2,1)*dcrd(nm3,1)
+                tmp2=-tijk(nm1,nm2,nm3)*dcrd(nm1,2)/tmp2
+                cuiijk(nm1,nm2,nm3)=tmp1+tmp2
+ 
+ 
+ !              UIJJK
+ !              ---------------------------------------------------------
+                tmp1=0d0
+                tmp2=0d0
+                tmp1=dcrd(nm1,1)*dcrd(nm2,1)**2*dcrd(nm3,1)
+                tmp1=uiijk(nm1,nm2,nm3)/tmp1
+                tmp2=dcrd(nm1,1)*dcrd(nm2,1)**3*dcrd(nm3,1)
+                tmp2=-tijk(nm1,nm2,nm3)*dcrd(nm2,2)/tmp2
+                cuijjk(nm1,nm2,nm3)=tmp1+tmp2
+ 
+ !              UIJKK
+ !              ---------------------------------------------------------
+                tmp1=0d0
+                tmp2=0d0
+                tmp1=dcrd(nm1,1)*dcrd(nm2,1)*dcrd(nm3,1)**2
+                tmp1=uiijk(nm1,nm2,nm3)/tmp1
+                tmp2=dcrd(nm1,1)*dcrd(nm2,1)*dcrd(nm3,1)**3
+                tmp2=-tijk(nm1,nm2,nm3)*dcrd(nm3,2)/tmp2
+                cuijkk(nm1,nm2,nm3)=tmp1+tmp2
+ 
+             end do
+          end do
+       end do   
+
+ !-----------------------------------------------------------------------
+ !     COPY CONVERTED QFF INTO THE ORIGINAL ONE
+ !-----------------------------------------------------------------------
+       hii=chii
+       tiii=ctiii
+       uiiii=cuiiii
+       tiij=ctiij
+       tjji=ctjji
+       uiiij=cuiiij
+       ujjji=cujjji
+       uiijj=cuiijj
+       tijk=ctijk
+       uiijk=cuiijk
+       uijjk=cuijjk
+       uijkk=cuijkk
+
+
+ !-----------------------------------------------------------------------
+ !     PRINT CONVERTED QFF
+ !-----------------------------------------------------------------------
+ 
+       write(77,*)
+       write(77,'(A)') '##############################################'
+       write(77,'(A)') '         FINISHED CONVERSION OF QFF           '
+       write(77,'(A)') '##############################################'
+       write(77,*)
+       write(77,'(A)') '           NEW QFF PARAMETERS                 '
+       write(77,'(A)') '----------------------------------------------'
+       write(77,'(A)') '                DIAGONAL'
+       write(77,'(A)') '----------------------------------------------'
+       do nm1=1,nvdf
+          write(77,'(I6,3D16.5)') nm1,hii(nm1),tiii(nm1),uiiii(nm1)
+       end do
+       write(77,'(A)') '----------------------------------------------'
+       write(77,'(A)') '           OFF-DIAGONAL DOUBLES               '
+       write(77,'(A)') '----------------------------------------------'
+       do nm1=1,nvdf-1
+          do nm2=nm1+1,nvdf
+             write(77,'(I4,I4,D16.5,D16.5,D16.5,D16.5,D16.5)') nm1,nm2,tiij(nm1,nm2), &
+                      &tjji(nm1,nm2), uiiij(nm1,nm2), ujjji(nm1,nm2), uiijj(nm1,nm2)
+          end do
+       end do
+       write(77,'(A)') '----------------------------------------------'
+       write(77,'(A)') '           OFF-DIAGONAL TRIPLES               '
+       write(77,'(A)') '----------------------------------------------'
+       do nm1=1,nvdf-2
+          do nm2=nm1+1,nvdf-1
+             do nm3=nm2+1,nvdf
+                write(77,'(3I4,99D16.5)') nm1,nm2,nm3,tijk(nm1,nm2,nm3), &
+                      &uiijk(nm1,nm2,nm3), uijjk(nm1,nm2,nm3), uijkk(nm1,nm2,nm3)
+             end do
+          end do
+       end do
+       write(77,'(A)') 'HESSIAN EIGENVALUES'
+       write(77,'(9D14.6)') hii
+       end subroutine
  
        subroutine hseminumqff(qva_cli,dy,nqmatoms,nclatoms,qmcoords,&
                              &clcoords,at_numbers,ndf,nvdf,&
@@ -1452,6 +1775,545 @@
  !     VIBRATIONAL SELF-CONSISTENT FIELD SECTION
  !#######################################################################
  
+       subroutine buildoperators2(qva_nml,alpha,hii,tiii,uiiii,gwidth,ngaus,nvdf,&
+                     &S,Q1,Q2,Q3,Hcore)
+       implicit none
+ 
+ !     ------------------------------------------------------------------
+       type(qva_nml_type), intent(in) :: qva_nml
+       integer, intent(in) :: ngaus  ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: nvdf   ! Number of vibrational degrees of freedom
+       real*8, intent(in)  :: alpha(nvdf)
+       real*8, intent(in)  :: hii(nvdf)   ! Hessian eigenvalues in AU.(d^2 V/dQi^2)
+       real*8, intent(in)  :: tiii(nvdf)  ! d^3 V/dQi^3
+       real*8, intent(in)  :: uiiii(nvdf) ! d^4 V/dQi^4
+       real*8, intent(in)  :: gwidth    ! Gaussian primitives width parameter. Default 0.5.
+       real*8, intent(out) :: S(ngaus,ngaus,nvdf)     ! Overlap Matrix
+       real*8, intent(out) :: Q1(ngaus,ngaus,nvdf)    ! Q^1 Operator
+       real*8, intent(out) :: Q2(ngaus,ngaus,nvdf)    ! Q^2 Operator
+       real*8, intent(out) :: Q3(ngaus,ngaus,nvdf)    ! Q^3 Operator
+       real*8, intent(out) :: Hcore(ngaus,ngaus,nvdf) ! Core hamiltonian.
+ !     PARAMETERS     
+       real*8,parameter    ::  a0 = 0.5291771D00      ! bohr radius
+       real*8,parameter    ::  pi = 2.0d0*acos(0.0d0) ! PI
+ !     Gauss-Hermite quadrature points for N=16.
+       real*8,parameter    ::  ghx16(16)=(/-4.688738939305818d+0,&
+                                     -3.869447904860123d+0,&
+                                     -3.176999161979960d+0,&
+                                     -2.546202157847480d+0,&
+                                     -1.951787990916254d+0,&
+                                     -1.380258539198882d+0,&
+                                    -0.8229514491446558d+0,&
+                                    -0.2734810461381524d+0,&
+                                     0.2734810461381525d+0,&
+                                     0.8229514491446560d+0,&
+                                      1.380258539198880d+0,&
+                                      1.951787990916254d+0,&
+                                      2.546202157847482d+0,&
+                                      3.176999161979959d+0,&
+                                      3.869447904860125d+0,&
+                                      4.688738939305819d+0 /)
+ !     LOCAL VARIABLES
+       character(len=117) :: format1,format2
+       real*8   :: A              ! Auxiliary variable for integrals computation.
+       real*8   :: B              ! Auxiliary variable for integrals computation.
+       real*8   :: C              ! Auxiliary variable for integrals computation.
+       real*8   :: D              ! Auxiliary variable for integrals computation.
+       real*8   :: T(ngaus,ngaus) ! Kinetic energy matrix.
+       real*8   :: V(ngaus,ngaus) ! Diagonal potential.
+       real*8   :: Q4(ngaus,ngaus,nvdf) ! Auxiliary variable for integrals computation.
+       integer  :: i,j,nm         ! Indexes
+       integer  :: ierr
+       integer             :: nmorse, nsinh
+       integer,allocatable :: morsemods(:), sinhmods(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac
+ !     ------------------------------------------------------------------
+ 
+       format1='(16D11.3)'
+       format2='(16F11.5)'
+ 
+ !     DISTRIBUTED GAUSSIAN BASIS SET
+ !     Gaussians are placed in Gauss-Hermite quadrature points, and 
+ !     scaled so their centers coincide with the nodes of an harmonic
+ !     oscillator wavefunction of vibrational quantum number equal to 
+ !     the number of gaussians specified by the user (only 16 for now). 
+ !     GH quadrature points were calculated using John Burkardt's code
+ !     which can be found at
+ !     people.sc.fsu.edu/~jburkardt/f_src/hermite_rule/hermite_rule.html
+ !     GH points ghx are scaled and displaced acording to
+ !     ghQ = ghx/Sqrt(omega_a)
+ !     Distributed Gaussians have the form
+ !     g(j,nm) = (2 A(j,nm)/pi)^1/4 exp[-A(j,nm)*(Qi-ghQ(j,nm))^2]
+ !     So to define the gaussian basis set we must define a set of
+ !     centers (GH points, ghQ) and widths (A(j,nm)).
+ !     For details see Hamilton & Light (1986)
+ 
+!      READING LIST OF NORMAL MODES INTO WHICH TO APPLY MORSE AND/OR SINH COORDS.
+!      THE LIST IS READ FROM A NAMELIST CALLED 'AUXCOORDS' INSIDE THE QUMVIA 
+!      COMMANDS INPUT FILE ALONGSIDE THE &QVA AND (POSSIBLY) &LIO NAMELISTS.
+
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST WHILE BUILDING OPERATORS')
+       end if
+
+       if (nmorse > 0) then
+          write(77,'(A)') 'buildoperators2: MORSE COORDINATES WILL BE APPLIED TO NMODES: '
+          write(77,'(99I3)') morsemods
+       end if 
+       if (nsinh > 0) then
+          write(77,'(A)') 'buildoperators2: SINH COORDINATES WILL BE APPLIED TO NMODES: '
+          write(77,'(99I3)') sinhmods
+       end if
+       
+ !     Computing core hamiltonian and Q^n integrals.
+       S = 0.0D0
+       Q1 = 0.0D0
+       Q2 = 0.0D0
+       Q3 = 0.0D0
+       Q4 = 0.0D0
+ 
+       do nm=1,nvdf
+          T=0.0D0
+          if ( ANY(morsemods == nm) ) then
+             write(77,*) 'CALLING morseoperator subroutine'
+             call morseoperator(nm,ngaus,nvdf,alpha,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+          else if ( ANY(sinhmods == nm) ) then
+             write(77,*) 'CALLING sinhoperator subroutine'
+             call sinhoperator(nm,ngaus,nvdf,alpha,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+          else
+             write(77,*) 'CALLING normaloperator subroutine'
+             call normaloperator(nm,ngaus,nvdf,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+          end if 
+
+!         Building core hamiltonian
+          V(:,:)= 0.5d0*hii(nm)*Q2(:,:,nm)+tiii(nm)*Q3(:,:,nm)/6.0d0+uiiii(nm)*Q4(:,:,nm)/24.0d0
+          Hcore(:,:,nm) = -0.5d0*T(:,:) + V(:,:)
+
+ !        -----------------------------------------------------------------
+ !        DEBUG
+ !        -----------------------------------------------------------------
+ !        write(77,'(A)') 'PRINTING CORE POTENTIAL'
+ !        write(77,'(A,I3)') 'normal mode ',nm
+ !        do i=1,ngaus
+ !           write(77,format1) V(i,:)
+ !        end do
+          write(77,'(A)') 'PRINTING CORE POTENTIAL DIAGONAL'
+          write(77,format1) (V(i,i),i=1,ngaus)
+ !        -----------------------------------------------------------------
+       end do
+ !     -----------------------------------------------------------------
+ !     DEBUG
+ !     Hcore=Hcore*1.0d01
+ !     -----------------------------------------------------------------
+ !      write(77,'(A)') 'PRINTING CORE HAMILTONIAN'
+ !      write(77,'(A)') 'normal mode 1'
+ !      do i=1,ngaus
+ !         write(78,format2) Hcore(i,:,1)
+ !      end do
+ !      write(77,'(A)') 'normal mode 2'
+ !      do i=1,ngaus
+ !         write(77,format1) Hcore(i,:,2)
+ !      end do
+ !      write(77,'(A)') 'normal mode 3'
+ !      do i=1,ngaus
+ !         write(77,format1) Hcore(i,:,2)
+ !      end do
+ !
+ !
+ !      write(77,'(A)') 'PRINTING OVERLAP MATRIX'
+ !      do nm=1,1
+ !         write(77,'(A,I2)') 'normal mode ',nm
+ !         do i=1,ngaus
+ !            write(99,format2) S(i,:,nm)
+ !         end do
+ !      end do
+!      write(77,'(A)') 
+!      write(77,'(A)') 
+!      write(77,'(A)') 'PRINTING Q1 MATRIX'
+!      do nm=1,nvdf
+!         write(77,'(A,I2)') 'normal mode ',nm
+!         write(77,format1) Q1(:,:,nm)
+!      end do
+!      write(77,'(A)') 
+!      write(77,'(A)') 
+!      write(77,'(A)') 'PRINTING Q2 MATRIX'
+!      do nm=1,nvdf
+!         write(77,'(A,I2)') 'normal mode ',nm
+!         write(77,format1) Q2(:,:,nm)
+!      end do
+!      write(77,'(A)') 
+!      write(77,'(A)') 
+!      write(77,'(A)') 'PRINTING Q3 MATRIX'
+!      do nm=1,nvdf
+!         write(77,'(A,I2)') 'normal mode ',nm
+!         write(77,format1) Q3(:,:,nm)
+!      end do
+!      write(77,'(A)') 
+!      write(77,'(A)') 
+!      write(77,'(A)') 'PRINTING Q4 MATRIX'
+!      do nm=1,nvdf
+!         write(77,'(A,I2)') 'normal mode ',nm
+!         write(77,format1) Q4(:,:,nm)
+!      end do
+ !     ------------------------------------------------------------------
+ 
+       end subroutine
+ 
+       subroutine sinhoperator(nm,ngaus,nvdf,alpha,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+       implicit none
+
+ !     ------------------------------------------------------------------
+       integer, intent(in) :: nm     ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: ngaus  ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: nvdf   ! Number of vibrational degrees of freedom
+       real*8, intent(in)  :: alpha(nvdf)
+       real*8, intent(in)  :: hii(nvdf)   ! Hessian eigenvalues in AU.(d^2 V/dQi^2)
+       real*8, intent(in)  :: gwidth    ! Gaussian primitives width parameter. Default 0.5.
+       real*8, intent(inout) :: S(ngaus,ngaus,nvdf)     ! Overlap Matrix
+       real*8, intent(inout) :: Q1(ngaus,ngaus,nvdf)    ! Q^1 Operator
+       real*8, intent(inout) :: Q2(ngaus,ngaus,nvdf)    ! Q^2 Operator
+       real*8, intent(inout) :: Q3(ngaus,ngaus,nvdf)    ! Q^3 Operator
+       real*8, intent(inout) :: Q4(ngaus,ngaus,nvdf)    ! Q^4 Operator
+       real*8, intent(inout) :: T(ngaus,ngaus) ! Kinetic energy matrix.
+ !     PARAMETERS     
+       real*8,parameter    ::  a0 = 0.5291771D00      ! bohr radius
+       real*8,parameter    ::  pi = 2.0d0*acos(0.0d0) ! PI
+ !     Gauss-Hermite quadrature points for N=16.
+       real*8,parameter    ::  ghx16(16)=(/-4.688738939305818d+0,&
+                                     -3.869447904860123d+0,&
+                                     -3.176999161979960d+0,&
+                                     -2.546202157847480d+0,&
+                                     -1.951787990916254d+0,&
+                                     -1.380258539198882d+0,&
+                                    -0.8229514491446558d+0,&
+                                    -0.2734810461381524d+0,&
+                                     0.2734810461381525d+0,&
+                                     0.8229514491446560d+0,&
+                                      1.380258539198880d+0,&
+                                      1.951787990916254d+0,&
+                                      2.546202157847482d+0,&
+                                      3.176999161979959d+0,&
+                                      3.869447904860125d+0,&
+                                      4.688738939305819d+0 /)
+ !     LOCAL VARIABLES
+       real*8   :: Ai(ngaus) ! Auxiliary variable for integrals computation.
+       real*8   :: omega(nvdf)    ! Vibrational frequencies in AU.
+       real*8   :: ghQ(ngaus)! Scaled and translated Gauss-Hermite points.
+       real*8   :: A              ! Auxiliary variable for integrals computation.
+       real*8   :: B              ! Auxiliary variable for integrals computation.
+       real*8   :: C              ! Auxiliary variable for integrals computation.
+       real*8   :: D              ! Auxiliary variable for integrals computation.
+       real*8   :: E              ! Auxiliary variable for integrals computation.
+       real*8   :: H1             ! Auxiliary variable for integrals computation.
+       real*8   :: H2             ! Auxiliary variable for integrals computation.
+       real*8   :: H3             ! Auxiliary variable for integrals computation.
+       real*8   :: H4             ! Auxiliary variable for integrals computation.
+       integer  :: i,j            ! Indexes
+ !     ------------------------------------------------------------------
+       
+       write(77,'(A,I3)') 'ENTERING SINH OPERATOR BUILDER. NM = ',nm
+       write(77,'(A,D15.8)') 'alpha(nm) =  ',alpha(nm)
+       
+ !     Scaling and displacing GH quadrature points
+       ghQ=0.0D0
+       omega = Sqrt(hii)
+       ghQ(:)=ghx16/Sqrt(omega(nm)*alpha(nm))
+ 
+ !     Building gaussian parameters A(j,nm)
+       Ai=0d0
+       Ai(1) = gwidth*gwidth/(ghQ(2)-ghQ(1))**2
+       do j=2,ngaus-1
+          Ai(j) = 4.0D0*gwidth*gwidth/(ghQ(j+1)-ghQ(j-1))**2
+       end do 
+       Ai(ngaus) = gwidth*gwidth/(ghQ(ngaus)-ghQ(ngaus-1))**2
+ 
+
+       do i=1,ngaus
+          do j=i,ngaus
+
+             A=Sqrt(Sqrt(4.0D0*Ai(i)*Ai(j)/PI**2))
+             B=Sqrt(Ai(i)+Ai(j))
+             C=Ai(i)*Ai(j)*(ghQ(i)-ghQ(j))**2/B**2
+             if (i == j) C=0d0
+             D=(Ai(i)*ghQ(i)+Ai(j)*ghQ(j))/(Ai(i)+Ai(j))
+             E=(0.5d0*alpha(nm)/B)**2
+
+ !           Overlap matrix
+             if (i /= j) then 
+                 S(i,j,nm)=Sqrt(PI)*A*Exp(-C)/B
+                 S(j,i,nm)=S(i,j,nm)
+             else
+                 S(i,i,nm) = 1d0
+             end if
+
+ !           Q matrix elements
+             H1=Exp( E )    * Sinh( D*alpha(nm) )
+             H2=Exp(4d0 *E) * Cosh(2d0*D*alpha(nm))
+             H3=Exp(9d0 *E) * Sinh(3d0*D*alpha(nm))
+             H4=Exp(16d0*E) * Cosh(4d0*D*alpha(nm))
+
+             Q1(i,j,nm)=S(i,j,nm)*H1
+             Q2(i,j,nm)=-0.5d0*S(i,j,nm)*(1d0-H2)
+             Q3(i,j,nm)=-(1d0/4d0)*S(i,j,nm)*(3d0*H1-H3)
+             Q4(i,j,nm)=(1d0/8d0)*S(i,j,nm)*(3d0-4d0*H2+H4)
+
+             if (i /= j) Q1(j,i,nm)=Q1(i,j,nm)
+             if (i /= j) Q2(j,i,nm)=Q2(i,j,nm)
+             if (i /= j) Q3(j,i,nm)=Q3(i,j,nm)
+             if (i /= j) Q4(j,i,nm)=Q4(i,j,nm)
+
+ !           Kinetic Energy matrix
+             T(i,j)=2.0d0*S(i,j,nm)*Ai(i)*Ai(j)*(-1.0D0+2.0D0*C)/B**2
+             if (i /= j) T(j,i)=T(i,j)
+
+          end do
+       end do
+
+ !     ------------------------------------------------------------------
+ !     DEBUG
+ !     ------------------------------------------------------------------
+       write(77,'(A)') 'GAUSS-HERMITE POINTS'
+       write(77,'(16F11.3)') (ghQ(i),i=1,ngaus)
+       write(77,'(A)') 'Ai COEFFICIENTS'
+       write(77,'(16D11.3)') (Ai(i),i=1,ngaus)
+ !     ------------------------------------------------------------------
+       end subroutine
+
+       subroutine morseoperator(nm,ngaus,nvdf,alpha,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+       implicit none
+
+ !     ------------------------------------------------------------------
+       integer, intent(in) :: nm     ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: ngaus  ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: nvdf   ! Number of vibrational degrees of freedom
+       real*8, intent(in)  :: alpha(nvdf)
+       real*8, intent(in)  :: hii(nvdf)   ! Hessian eigenvalues in AU.(d^2 V/dQi^2)
+       real*8, intent(in)  :: gwidth    ! Gaussian primitives width parameter. Default 0.5.
+       real*8, intent(inout) :: S(ngaus,ngaus,nvdf)     ! Overlap Matrix
+       real*8, intent(inout) :: Q1(ngaus,ngaus,nvdf)    ! Q^1 Operator
+       real*8, intent(inout) :: Q2(ngaus,ngaus,nvdf)    ! Q^2 Operator
+       real*8, intent(inout) :: Q3(ngaus,ngaus,nvdf)    ! Q^3 Operator
+       real*8, intent(inout) :: Q4(ngaus,ngaus,nvdf)    ! Q^4 Operator
+       real*8, intent(inout) :: T(ngaus,ngaus) ! Kinetic energy matrix.
+ !     PARAMETERS     
+!       real*8,parameter    ::  a0 = 0.5291771D00      ! bohr radius
+       real*8,parameter    ::  pi = 2.0d0*acos(0.0d0) ! PI
+ !     Gauss-Hermite quadrature points for N=16.
+       real*8,parameter    ::  ghx16(16)=(/-4.688738939305818d+0,&
+                                     -3.869447904860123d+0,&
+                                     -3.176999161979960d+0,&
+                                     -2.546202157847480d+0,&
+                                     -1.951787990916254d+0,&
+                                     -1.380258539198882d+0,&
+                                    -0.8229514491446558d+0,&
+                                    -0.2734810461381524d+0,&
+                                     0.2734810461381525d+0,&
+                                     0.8229514491446560d+0,&
+                                      1.380258539198880d+0,&
+                                      1.951787990916254d+0,&
+                                      2.546202157847482d+0,&
+                                      3.176999161979959d+0,&
+                                      3.869447904860125d+0,&
+                                      4.688738939305819d+0 /)
+ !     LOCAL VARIABLES
+       real*8   :: Ai(ngaus) ! Auxiliary variable for integrals computation.
+       real*8   :: omega(nvdf)    ! Vibrational frequencies in AU.
+       real*8   :: ghQ(ngaus)! Scaled and translated Gauss-Hermite points.
+       real*8   :: A              ! Auxiliary variable for integrals computation.
+       real*8   :: B              ! Auxiliary variable for integrals computation.
+       real*8   :: C              ! Auxiliary variable for integrals computation.
+       real*8   :: D              ! Auxiliary variable for integrals computation.
+       real*8   :: E              ! Auxiliary variable for integrals computation.
+       real*8   :: I1             ! Auxiliary variable for integrals computation.
+       real*8   :: I2             ! Auxiliary variable for integrals computation.
+       real*8   :: M1             ! Auxiliary variable for integrals computation.
+       real*8   :: M2             ! Auxiliary variable for integrals computation.
+       real*8   :: M3             ! Auxiliary variable for integrals computation.
+       real*8   :: M4             ! Auxiliary variable for integrals computation.
+       integer  :: i,j            ! Indexes
+ !     ------------------------------------------------------------------
+
+       write(77,'(A,I3)') 'ENTERING MORSE OPERATOR BUILDER. NM = ',nm
+       write(77,'(A,D15.8)') 'alpha(nm) =  ',alpha(nm)
+       
+ !     Scaling and displacing GH quadrature points
+       ghQ=0.0D0
+       omega = Sqrt(hii)
+       ghQ(:)=ghx16/Sqrt(omega(nm)*ABS(alpha(nm)))
+ 
+ !     Building gaussian parameters A(j,nm)
+       Ai(1) = gwidth*gwidth/(ghQ(2)-ghQ(1))**2
+       do j=2,ngaus-1
+          Ai(j) = 4.0D0*gwidth*gwidth/(ghQ(j+1)-ghQ(j-1))**2
+       end do 
+       Ai(ngaus) = gwidth*gwidth/(ghQ(ngaus)-ghQ(ngaus-1))**2
+
+       do i=1,ngaus
+          do j=i,ngaus
+
+             A=Sqrt(Sqrt(4.0D0*Ai(i)*Ai(j)/PI**2))
+             B=Sqrt(Ai(i)+Ai(j))
+             C=Ai(i)*Ai(j)*(ghQ(i)-ghQ(j))**2/B**2
+             if (i == j) C=0d0
+             D=(Ai(i)*ghQ(i)+Ai(j)*ghQ(j))/(Ai(i)+Ai(j))
+             E=(0.5d0*alpha(nm)/B)**2
+
+ !           Overlap matrix
+             if (i /= j) then 
+                 S(i,j,nm)=Sqrt(PI)*A*Exp(-C)/B
+                 S(j,i,nm)=S(i,j,nm)
+             else
+                 S(i,i,nm) = 1d0
+             end if
+
+ !           Q matrix elements
+             M1=Exp(E - D*alpha(nm))
+             M2=Exp( 4d0*E - 2d0*D*alpha(nm))
+             M3=Exp( 9d0*E - 3d0*D*alpha(nm))
+             M4=Exp(16d0*E - 4d0*D*alpha(nm))
+
+             Q1(i,j,nm)=S(i,j,nm)*(1d0-M1)
+             Q2(i,j,nm)=S(i,j,nm)*(1d0-2d0*M1+M2)
+             Q3(i,j,nm)=S(i,j,nm)*(1d0-3d0*M1+3d0*M2-M3)
+             Q4(i,j,nm)=S(i,j,nm)*(1d0-4d0*M1+6d0*M2-4d0*M3+M4)
+
+             if (i /= j) Q1(j,i,nm)=Q1(i,j,nm)
+             if (i /= j) Q2(j,i,nm)=Q2(i,j,nm)
+             if (i /= j) Q3(j,i,nm)=Q3(i,j,nm)
+             if (i /= j) Q4(j,i,nm)=Q4(i,j,nm)
+
+!            Kinetic Energy matrix
+             T(i,j)=2.0d0*S(i,j,nm)*Ai(i)*Ai(j)*(-1.0D0+2.0D0*C)/B**2
+             if (i /= j) T(j,i)=T(i,j)
+
+          end do
+       end do
+
+ !     ------------------------------------------------------------------
+ !     DEBUG
+ !     ------------------------------------------------------------------
+       write(77,'(A)') 'GAUSS-HERMITE POINTS'
+       write(77,'(16F11.3)') (ghQ(i),i=1,ngaus)
+       write(77,'(A)') 'Ai COEFFICIENTS'
+       write(77,'(16D11.3)') (Ai(i),i=1,ngaus)
+ !     ------------------------------------------------------------------
+       end subroutine
+
+       subroutine normaloperator(nm,ngaus,nvdf,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+       implicit none
+
+ !     ------------------------------------------------------------------
+       integer, intent(in) :: nm     ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: ngaus  ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: nvdf   ! Number of vibrational degrees of freedom
+       real*8, intent(in)  :: hii(nvdf)   ! Hessian eigenvalues in AU.(d^2 V/dQi^2)
+       real*8, intent(in)  :: gwidth    ! Gaussian primitives width parameter. Default 0.5.
+       real*8, intent(inout) :: S(ngaus,ngaus,nvdf)     ! Overlap Matrix
+       real*8, intent(inout) :: Q1(ngaus,ngaus,nvdf)    ! Q^1 Operator
+       real*8, intent(inout) :: Q2(ngaus,ngaus,nvdf)    ! Q^2 Operator
+       real*8, intent(inout) :: Q3(ngaus,ngaus,nvdf)    ! Q^3 Operator
+       real*8, intent(inout) :: Q4(ngaus,ngaus,nvdf)    ! Q^4 Operator
+       real*8, intent(inout) :: T(ngaus,ngaus) ! Kinetic energy matrix.
+ !     PARAMETERS     
+       real*8,parameter    ::  a0 = 0.5291771D00      ! bohr radius
+       real*8,parameter    ::  pi = 2.0d0*acos(0.0d0) ! PI
+ !     Gauss-Hermite quadrature points for N=16.
+       real*8,parameter    ::  ghx16(16)=(/-4.688738939305818d+0,&
+                                     -3.869447904860123d+0,&
+                                     -3.176999161979960d+0,&
+                                     -2.546202157847480d+0,&
+                                     -1.951787990916254d+0,&
+                                     -1.380258539198882d+0,&
+                                    -0.8229514491446558d+0,&
+                                    -0.2734810461381524d+0,&
+                                     0.2734810461381525d+0,&
+                                     0.8229514491446560d+0,&
+                                      1.380258539198880d+0,&
+                                      1.951787990916254d+0,&
+                                      2.546202157847482d+0,&
+                                      3.176999161979959d+0,&
+                                      3.869447904860125d+0,&
+                                      4.688738939305819d+0 /)
+ !     LOCAL VARIABLES
+       real*8   :: Ai(ngaus) ! Auxiliary variable for integrals computation.
+       real*8   :: omega(nvdf)    ! Vibrational frequencies in AU.
+       real*8   :: ghQ(ngaus)! Scaled and translated Gauss-Hermite points.
+       real*8   :: A              ! Auxiliary variable for integrals computation.
+       real*8   :: B              ! Auxiliary variable for integrals computation.
+       real*8   :: C              ! Auxiliary variable for integrals computation.
+       real*8   :: D              ! Auxiliary variable for integrals computation.
+       integer  :: i,j            ! Indexes
+ !     ------------------------------------------------------------------
+       
+       write(77,'(A,I3)') 'ENTERING NORMAL OPERATOR BUILDER. NM = ',nm
+       
+ !     Scaling and displacing GH quadrature points
+       ghQ=0.0D0
+       omega = Sqrt(hii)
+       ghQ(:)=ghx16/Sqrt(omega(nm))
+ 
+ !     Building gaussian parameters A(j,nm)
+       Ai(1) = gwidth*gwidth/(ghQ(2)-ghQ(1))**2
+       do j=2,ngaus-1
+          Ai(j) = 4.0D0*gwidth*gwidth/(ghQ(j+1)-ghQ(j-1))**2
+       end do 
+       Ai(ngaus) = gwidth*gwidth/(ghQ(ngaus)-ghQ(ngaus-1))**2
+
+
+       do i=1,ngaus
+          do j=i,ngaus
+             A=Sqrt(Sqrt(4.0D0*Ai(i)*Ai(j)/PI**2))
+             B=Sqrt(Ai(i)+Ai(j))
+             C=Ai(i)*Ai(j)*(ghQ(i)-ghQ(j))**2/B**2
+
+!            Careful here! D is defined differently in Normal coords than in Morse and SinH.
+!            The exponent of B IS supposed to be 1 here.
+             D=(Ai(i)*ghQ(i)+Ai(j)*ghQ(j))/B    
+             if (i == j) C=0d0
+
+ !           Overlap matrix
+             if (i /= j) then 
+                 S(i,j,nm)=Sqrt(PI)*A*Exp(-C)/B
+                 S(j,i,nm)=S(i,j,nm)
+             else
+                 S(i,i,nm) = 1d0
+             end if
+
+ !           Kinetic Energy matrix
+             T(i,j)=2.0d0*S(i,j,nm)*Ai(i)*Ai(j)*(-1.0D0+2.0D0*C)/B**2
+             if (i /= j) T(j,i)=T(i,j)
+
+ !           Q matrix elements
+             Q1(i,j,nm)=S(i,j,nm)*D/B
+             Q2(i,j,nm)=S(i,j,nm)*(1.0D0+2.0D0*D**2)*0.5d0/B**2
+             Q3(i,j,nm)=S(i,j,nm)*(3.0D0*D + 2.0d0*D**3)*0.5d0/B**3
+             Q4(i,j,nm)=S(i,j,nm)*(3.0D0+12.0D0*D**2+4.0D0*D**4)*0.25d0/B**4
+
+             if (i /= j) Q1(j,i,nm)=Q1(i,j,nm)
+             if (i /= j) Q2(j,i,nm)=Q2(i,j,nm)
+             if (i /= j) Q3(j,i,nm)=Q3(i,j,nm)
+             if (i /= j) Q4(j,i,nm)=Q4(i,j,nm)
+          end do
+       end do
+
+ !     ------------------------------------------------------------------
+ !     DEBUG
+ !     ------------------------------------------------------------------
+       write(77,'(A)') 'GAUSS-HERMITE POINTS'
+       write(77,'(16F11.3)') (ghQ(i),i=1,ngaus)
+       write(77,'(A)') 'Ai COEFFICIENTS'
+       write(77,'(16D11.3)') (Ai(i),i=1,ngaus)
+ !     ------------------------------------------------------------------
+
+       end subroutine
  
  
        subroutine buildoperators(hii,tiii,uiiii,gwidth,ngaus,nvdf,&
@@ -2689,10 +3551,11 @@
                     &ngaus,qmcoords,clcoords,at_numbers,ndf,nvdf,&
                     &P,Po,Scho,Evscf,Q1,Q2,Q3,Hcore,GDmtrx,GTmtrx,Emod,&
                     &hii,tiii,uiiii,tiij,tjji,uiiij,ujjji,uiijj,&
-                    &tijk,uiijk,uijjk,uijkk,vscfstat)
+                    &tijk,uiijk,uijjk,uijkk,vscfstat,qva_nml,alpha)
  
        implicit none
  
+       type(qva_nml_type),intent(in) :: qva_nml
        integer,intent(in)  :: ref(4)               ! Reference state          
        integer,intent(in)  :: ndf                  ! Number of classical atoms
        integer,intent(in)  :: nvdf                 ! Number of classical atoms
@@ -2702,6 +3565,7 @@
        integer,intent(in)  :: nclatoms             ! Number of classical atoms
        integer,intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
        integer, intent(out):: vscfstat
+       real*8, intent(in)  :: alpha(nvdf)          ! Alpha factors for Morse/Sinh coords
        real*8, intent(in)  :: dy                   ! Step size factor for num derivatives.
        real*8, intent(in)  :: gwidth               ! Width factor for gaussian primitives.
        real*8, intent(in)  :: eig(ndf)             ! Eigenvalues of the hessian matrix.
@@ -2802,7 +3666,14 @@
        if (nm2 /= 0) psi(nm2) = qn2
  
  !     Build Core Hamiltonian and Qi^n matrices.
-       call buildoperators(hii,tiii,uiiii,gwidth,ngaus,nvdf,S,Q1,Q2,Q3,Hcore)
+       if (qva_nml%nmorse > 0 .OR. qva_nml%nsinh > 0) then
+!         If morse and sinh coordinates are required along normal coords.
+          call buildoperators2(qva_nml,alpha,hii,tiii,uiiii,gwidth,ngaus,nvdf,&
+                             & S,Q1,Q2,Q3,Hcore)
+       else
+!         If only normal coods are required.
+          call buildoperators(hii,tiii,uiiii,gwidth,ngaus,nvdf,S,Q1,Q2,Q3,Hcore)
+       end if 
        
  !     Compute Cholesky decomposition and the inverse of the cholesky
  !     factor.
@@ -2813,7 +3684,7 @@
  !     transformed back eigenvectors coeficients and eigenvalues.
        call solveGEV(Hcore,Scho,IScho,nvdf,ngaus,P,Po,Emod)
       
- 
+       Evscf=0.0D0
        do nm=1,nvdf
           if (nm == nm1) then
              Evscf = Evscf + Emod(qn1+1,nm)
