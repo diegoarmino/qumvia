@@ -35,7 +35,8 @@
     public :: geoms4qff,get_qva_nml,readnqmatoms,qva_nml_type, &
            &  readgeom, readgaunmodes, readqff, readgamessqff, &
            &  hseminumqff, readaddref, genconf3, print_qva_nml,&
-           &  ssvscf2, csVCI2,qva_cli_type,convertQFF
+           &  ssvscf2, csVCI2,qva_cli_type,convertQFF,ssvscfps,&
+           &  csVCIps,convertqffPS
  
     type qva_nml_type
       integer :: nhess
@@ -52,12 +53,14 @@
       integer :: csdepth
       integer :: nmorse
       integer :: nsinh
+      integer :: npartsub
       real*8  :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
       real*8  :: selcut1
       real*8  :: selcut2
       real*8  :: qva_dstep
+      logical :: dopartsub
     end type qva_nml_type
 
     type qva_cli_type
@@ -93,17 +96,19 @@
           integer :: csdepth
           integer :: nmorse
           integer :: nsinh
+          integer :: npartsub
           real*8  :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
           real*8  :: selcut1
           real*8  :: selcut2
           real*8  :: qva_dstep
+          logical :: dopartsub
        
           namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
-          nmorse,nsinh
+          nmorse,nsinh,npartsub,dopartsub
        
           integer :: ifind, ierr
        
@@ -128,6 +133,8 @@
           csiterfactor=10d0
           nmorse=0
           nsinh=0
+          npartsub=0
+          dopartsub=.FALSE.
        
        !  READ NAMELIST
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
@@ -162,6 +169,8 @@
           qva_nml%csiterfactor=csiterfactor
           qva_nml%nmorse=nmorse
           qva_nml%nsinh=nsinh
+          qva_nml%npartsub=npartsub
+          qva_nml%dopartsub=dopartsub
        
        end subroutine get_qva_nml
  
@@ -187,6 +196,8 @@
           write(77,'(A,I3)') '  csdepth = ',qva_nml%csdepth
           write(77,'(A,I3)') '  nmorse = ',qva_nml%nmorse
           write(77,'(A,I3)') '  nsinh = ',qva_nml%nsinh
+          write(77,'(A,I3)') '  npartsub = ',qva_nml%npartsub
+          write(77,'(A,L)') '  dopartsub = ',qva_nml%dopartsub
           write(77,'(A,F7.2)') '  csiterfactor = ',qva_nml%csiterfactor
           write(77,'(A,F7.3)') '  vscf_gauswidth = ',qva_nml%vscf_gauswidth
           write(77,'(A,F7.0)') '  ethresh = ',qva_nml%ethresh
@@ -828,6 +839,345 @@
        write(77,'(9D14.6)') hii
        end subroutine
  
+       subroutine convertQFFps(qva_nml,nvdf,hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,&
+                           & uiijj,tijk,uiijk,uijjk,uijkk,alpha)
+ !     ------------------------------------------------------------------
+ !     CONVERTS THE QFF TO MORSE AND/OR SINH COORDINATES IN THE 
+ !     APPROPIATE DEGREES OF FREEDOM
+ !     ------------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type), intent(in)  :: qva_nml  ! QUMVIA namelist parameters
+       integer, intent(in) :: nvdf                 ! Number of vib degrees of freedom (ndf-6)
+       real*8, intent(inout) :: hii(nvdf)           ! Diagonal cubic coupling terms
+       real*8, intent(inout) :: tiii(nvdf)           ! Diagonal cubic coupling terms
+       real*8, intent(inout) :: uiiii(nvdf)          ! Diagonal quartic coupling terms
+       real*8, intent(inout) :: tiij(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8, intent(inout) :: tjji(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8, intent(inout) :: uiiij(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8, intent(inout) :: ujjji(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8, intent(inout) :: uiijj(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8, intent(inout) :: tijk(nvdf,nvdf,nvdf)      ! 3-mode cubic coupling terms
+       real*8, intent(inout) :: uiijk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8, intent(inout) :: uijjk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8, intent(inout) :: uijkk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8, intent(out) :: alpha(nvdf)         ! Derivatives of the coordinate.
+ 
+!      LOCAL VARIABLES
+!      Temporary converted QFF parameters -----------------------------------------------
+       real*8              :: chii(nvdf)           ! Diagonal cubic coupling terms
+       real*8              :: ctiii(nvdf)           ! Diagonal cubic coupling terms
+       real*8              :: cuiiii(nvdf)          ! Diagonal quartic coupling terms
+       real*8              :: ctiij(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8              :: ctjji(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8              :: cuiiij(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8              :: cujjji(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8              :: cuiijj(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8              :: ctijk(nvdf,nvdf,nvdf)      ! 3-mode cubic coupling terms
+       real*8              :: cuiijk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8              :: cuijjk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8              :: cuijkk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+!      Temporary converted QFF parameters -----------------------------------------------
+!      Other local variables.
+       real*8              :: dcrd(nvdf,4)         ! Derivatives of the coordinate.
+       real*8              :: tmp1
+       real*8              :: tmp2
+       real*8              :: tmp3
+       real*8              :: aa
+       integer             :: ierr
+       integer             :: i, j, k
+       integer             :: m, nm, p
+       integer             :: nm1, nm2, nm3
+       integer             :: nmorse, nsinh, npartsub
+       integer,allocatable :: morsemods(:), sinhmods(:), partsubdf(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac,partsubdf
+     
+       include "qvmbia_param.f"
+       write(77,'(A)')'------------------------------------------------------------------------' 
+       write(77,'(A)')'        CONVERTING THE QFF INTO MORSE/SINH COORDINATES            ' 
+       write(77,'(A)')'------------------------------------------------------------------------' 
+ 
+ !-----------------------------------------------------------------------
+ !     COMPUTE ALPHA FACTORS AND DERIVATIVES FOR ALL DEGREES OF FREEDOM
+ !     FOR WHICH A CONVERSION TO NEW COORDINATES IS REQUIRED. 
+ !     CONVERSION OF COORDINATES INTO MORSE OR SINH COORDS IS
+ !     ACHIEVED THROUGH THE USE OF THE CHAIN RULE.
+ !-----------------------------------------------------------------------
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+       npartsub = qva_nml%npartsub
+
+!      READING LIST OF NORMAL MODES INTO WHICH TO APPLY MORSE AND/OR SINH COORDS.
+!      THE LIST IS READ FROM A NAMELIST CALLED 'AUXCOORDS' INSIDE THE QUMVIA 
+!      COMMANDS INPUT FILE ALONGSIDE THE &QVA AND (POSSIBLY) &LIO NAMELISTS.
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf),partsubdf(npartsub))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST')
+       end if
+
+       write(77,'(A,99F12.3)') 'CORRECTION COEFFICIENTS FOR ALPHA ',afac
+
+       if (nmorse > 0) then
+          write(77,'(A)') 'MORSE COORDINATES WILL BE APPLIED TO NORMAL MODES: '
+          write(77,'(99I3)') morsemods
+       end if 
+       if (nsinh > 0) then
+          write(77,'(A)') 'SINH COORDINATES WILL BE APPLIED TO NORMAL MODES: '
+          write(77,'(99I3)') sinhmods
+       end if
+       
+       dcrd(:,1)=1d0
+       dcrd(:,2:4)=0d0
+
+!      MORSE COORDINATES
+       do i=1,nmorse
+          nm=morsemods(i)
+          aa=-afac(nm)*tiii(nm)/(3d0*hii(nm)) ! Alpha factor for MORSE coords.
+          if (aa<0d0 ) then
+             write(77,'(A,I3)') 'WARNING!: ALPHA IS NEGATIVE FOR NORMAL MODE ',nm
+          end if
+          dcrd(nm,1)=aa
+          dcrd(nm,2)=-aa**2
+          dcrd(nm,3)=aa**3
+          dcrd(nm,4)=-aa**4
+       end do
+
+!      SINH COORDINATES
+       do i=1,nsinh
+          nm=sinhmods(i)
+          if (uiiii(nm)/hii(nm) < 0) write(77,'(A,I3,A)') 'WARNING: ALPHA FOR MODE ',nm,'IS MAGINARY'
+          aa=afac(nm)*Sqrt(Abs(uiiii(nm)/(4d0*hii(nm)))) ! Alpha factor for SINH coords.
+          dcrd(nm,1)=aa
+          dcrd(nm,2)=0d0
+          dcrd(nm,3)=aa**3
+          dcrd(nm,4)=0d0
+       end do
+ 
+!      COPY ALPHA FACTORS INTO AN OUTPUT VARIABLE
+       alpha(:) = dcrd(:,1)
+       write(77,'(A)') 'ALPHA'
+       write(77,'(99D15.8)') alpha
+       write(77,'(A)') 'DERIVATIVES OF R(Q) WITH RESPECT TO Q'
+       do i=1,4
+          write(77,'(99D15.8)') dcrd(:,i)
+       end do
+
+ !-----------------------------------------------------------------------
+ !     COPY THE ORIGINAL QFF INTO THE CONVERTED ONE
+ !-----------------------------------------------------------------------
+       chii=hii
+       ctiii=tiii
+       cuiiii=uiiii
+       ctiij=tiij
+       ctjji=tjji
+       cuiiij=uiiij
+       cujjji=ujjji
+       cuiijj=uiijj
+       ctijk=tijk
+       cuiijk=uiijk
+       cuijjk=uijjk
+       cuijkk=uijkk
+
+ !-----------------------------------------------------------------------
+ !     DIAGONAL QFF TERMS
+ !-----------------------------------------------------------------------
+       do nm=1,nvdf
+          if (ANY(partsubdf==nm)) then
+             chii(nm)=hii(nm)/dcrd(nm,1)**2
+   
+             tmp1=tiii(nm)*dcrd(nm,1)
+             tmp2=-3d0*hii(nm)*dcrd(nm,2)
+             ctiii(nm)=(tmp1+tmp2)/dcrd(nm,1)**4
+             
+             tmp1= uiiii(nm)/(dcrd(nm,1)**4)
+             tmp2= -6d0 * tiii(nm) * dcrd(nm,2) / dcrd(nm,1)**5
+             tmp3= 15 * dcrd(nm,2)**2 - 4d0 * dcrd(nm,1) * dcrd(nm,3)
+             tmp3= hii(nm) * tmp3 / dcrd(nm,1)**6
+             cuiiii(nm)=tmp1+tmp2+tmp3
+          end if
+       end do
+       
+ !-----------------------------------------------------------------------
+ !     2-MODE COUPLING QFF TERMS
+ !-----------------------------------------------------------------------
+       do nm1=1,nvdf-1
+          do nm2=nm1+1,nvdf
+ 
+             if (ANY(partsubdf==nm1) .AND. ANY(partsubdf==nm2)) then
+!               TIIJ
+!               -----------------------------------------------------------
+                tmp1=0d0
+                tmp1=(dcrd(nm1,1)**2)*dcrd(nm2,1)
+                ctiij(nm1,nm2)=tiij(nm1,nm2)/tmp1
+    
+!               TJJI
+!               -----------------------------------------------------------
+                tmp1=0d0
+                tmp1=dcrd(nm1,1)*dcrd(nm2,1)**2
+                ctjji(nm1,nm2)=tjji(nm1,nm2)/tmp1
+    
+!               UIIIJ
+!               -----------------------------------------------------------
+                tmp1=0d0
+                tmp2=0d0
+
+                tmp1=(dcrd(nm1,1)**3)*dcrd(nm2,1)
+                tmp1=uiiij(nm1,nm2)/tmp1
+
+                tmp2=(dcrd(nm1,1)**4)*dcrd(nm2,1)
+                tmp2=-3d0*tiij(nm1,nm2)*dcrd(nm1,2)/tmp2
+
+                cuiiij(nm1,nm2)=tmp1+tmp2
+                  
+!               UJJJI
+!               -----------------------------------------------------------
+                tmp1=0d0
+                tmp2=0d0
+
+                tmp1=dcrd(nm1,1)*dcrd(nm2,1)**3
+                tmp1=ujjji(nm1,nm2)/tmp1
+
+                tmp2=dcrd(nm1,1)*dcrd(nm2,1)**4
+                tmp2=-3d0*tjji(nm1,nm2)*dcrd(nm2,2)/tmp2
+
+                cujjji(nm1,nm2)=tmp1+tmp2
+                  
+!               UIIJJ
+!               -----------------------------------------------------------
+                tmp1=0d0
+                tmp2=0d0
+                tmp3=0d0
+
+                tmp1=dcrd(nm1,1)**2 * dcrd(nm2,1)**2
+                tmp1=uiijj(nm1,nm2)/tmp1
+
+                tmp2=dcrd(nm1,1)**3 * dcrd(nm2,1)**2
+                tmp2=-tjji(nm1,nm2)*dcrd(nm1,2)/tmp2
+
+                tmp3=dcrd(nm1,1)**2 * dcrd(nm2,1)**3
+                tmp3=-tiij(nm1,nm2)*dcrd(nm2,2)/tmp3
+
+                cuiijj(nm1,nm2)=tmp1+tmp2+tmp3
+             end if
+    
+          end do 
+       end do
+ 
+ !-----------------------------------------------------------------------
+ !     THREE MODES COUPLING TERMS
+ !-----------------------------------------------------------------------
+       do nm1=1,nvdf-2
+          do nm2=nm1+1,nvdf-1
+             do nm3=nm2+1,nvdf
+ 
+                if (ANY(partsubdf==nm1) .AND. &
+                  & ANY(partsubdf==nm2) .AND. &
+                  & ANY(partsubdf==nm3) ) then
+!                  TIJK
+!                  ---------------------------------------------------------
+                   tmp1=0d0
+                   tmp1=dcrd(nm1,1)*dcrd(nm2,1)*dcrd(nm3,1)
+                   ctijk(nm1,nm2,nm3)=tijk(nm1,nm2,nm3)/tmp1
+    
+                 
+!                  UIIJK
+!                  ---------------------------------------------------------
+                   tmp1=0d0
+                   tmp2=0d0
+                   tmp1=dcrd(nm1,1)**2*dcrd(nm2,1)*dcrd(nm3,1)
+                   tmp1=uiijk(nm1,nm2,nm3)/tmp1
+                   tmp2=dcrd(nm1,1)**3*dcrd(nm2,1)*dcrd(nm3,1)
+                   tmp2=-tijk(nm1,nm2,nm3)*dcrd(nm1,2)/tmp2
+                   cuiijk(nm1,nm2,nm3)=tmp1+tmp2
+    
+    
+!                  UIJJK
+!                  ---------------------------------------------------------
+                   tmp1=0d0
+                   tmp2=0d0
+                   tmp1=dcrd(nm1,1)*dcrd(nm2,1)**2*dcrd(nm3,1)
+                   tmp1=uiijk(nm1,nm2,nm3)/tmp1
+                   tmp2=dcrd(nm1,1)*dcrd(nm2,1)**3*dcrd(nm3,1)
+                   tmp2=-tijk(nm1,nm2,nm3)*dcrd(nm2,2)/tmp2
+                   cuijjk(nm1,nm2,nm3)=tmp1+tmp2
+    
+!                  UIJKK
+!                  ---------------------------------------------------------
+                   tmp1=0d0
+                   tmp2=0d0
+                   tmp1=dcrd(nm1,1)*dcrd(nm2,1)*dcrd(nm3,1)**2
+                   tmp1=uiijk(nm1,nm2,nm3)/tmp1
+                   tmp2=dcrd(nm1,1)*dcrd(nm2,1)*dcrd(nm3,1)**3
+                   tmp2=-tijk(nm1,nm2,nm3)*dcrd(nm3,2)/tmp2
+                   cuijkk(nm1,nm2,nm3)=tmp1+tmp2
+                end if 
+
+             end do
+          end do
+       end do   
+
+
+ !-----------------------------------------------------------------------
+ !     COPY CONVERTED QFF INTO THE ORIGINAL ONE
+ !-----------------------------------------------------------------------
+       hii=chii
+       tiii=ctiii
+       uiiii=cuiiii
+       tiij=ctiij
+       tjji=ctjji
+       uiiij=cuiiij
+       ujjji=cujjji
+       uiijj=cuiijj
+       tijk=ctijk
+       uiijk=cuiijk
+       uijjk=cuijjk
+       uijkk=cuijkk
+
+ !-----------------------------------------------------------------------
+ !     PRINT CONVERTED QFF
+ !-----------------------------------------------------------------------
+ 
+       write(77,*)
+       write(77,'(A)') '##############################################'
+       write(77,'(A)') '         FINISHED CONVERSION OF QFF           '
+       write(77,'(A)') '##############################################'
+       write(77,*)
+       write(77,'(A)') '           NEW QFF PARAMETERS                 '
+       write(77,'(A)') '----------------------------------------------'
+       write(77,'(A)') '                DIAGONAL'
+       write(77,'(A)') '----------------------------------------------'
+       do nm1=1,nvdf
+          write(77,'(I6,3D16.5)') nm1,hii(nm1),tiii(nm1),uiiii(nm1)
+       end do
+       write(77,'(A)') '----------------------------------------------'
+       write(77,'(A)') '           OFF-DIAGONAL DOUBLES               '
+       write(77,'(A)') '----------------------------------------------'
+       do nm1=1,nvdf-1
+          do nm2=nm1+1,nvdf
+             write(77,'(I4,I4,D16.5,D16.5,D16.5,D16.5,D16.5)') nm1,nm2,tiij(nm1,nm2), &
+                      &tjji(nm1,nm2), uiiij(nm1,nm2), ujjji(nm1,nm2), uiijj(nm1,nm2)
+          end do
+       end do
+       write(77,'(A)') '----------------------------------------------'
+       write(77,'(A)') '           OFF-DIAGONAL TRIPLES               '
+       write(77,'(A)') '----------------------------------------------'
+       do nm1=1,nvdf-2
+          do nm2=nm1+1,nvdf-1
+             do nm3=nm2+1,nvdf
+                write(77,'(3I4,99D16.5)') nm1,nm2,nm3,tijk(nm1,nm2,nm3), &
+                      &uiijk(nm1,nm2,nm3), uijjk(nm1,nm2,nm3), uijkk(nm1,nm2,nm3)
+             end do
+          end do
+       end do
+       write(77,'(A)') 'HESSIAN EIGENVALUES'
+       write(77,'(9D14.6)') hii
+       end subroutine
+
        subroutine hseminumqff(qva_cli,dy,nqmatoms,nclatoms,qmcoords,&
                              &clcoords,at_numbers,ndf,nvdf,&
                              &hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,&
@@ -2315,6 +2665,114 @@
 
        end subroutine
  
+       subroutine normaloperatorPS(nm,ngaus,nvdf,alpha,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+       implicit none
+
+ !     ------------------------------------------------------------------
+       integer, intent(in) :: nm     ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: ngaus  ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: nvdf   ! Number of vibrational degrees of freedom
+       real*8, intent(in)  :: alpha(nvdf)
+       real*8, intent(in)  :: hii(nvdf)   ! Hessian eigenvalues in AU.(d^2 V/dQi^2)
+       real*8, intent(in)  :: gwidth    ! Gaussian primitives width parameter. Default 0.5.
+       real*8, intent(inout) :: S(ngaus,ngaus,nvdf)     ! Overlap Matrix
+       real*8, intent(inout) :: Q1(ngaus,ngaus,nvdf)    ! Q^1 Operator
+       real*8, intent(inout) :: Q2(ngaus,ngaus,nvdf)    ! Q^2 Operator
+       real*8, intent(inout) :: Q3(ngaus,ngaus,nvdf)    ! Q^3 Operator
+       real*8, intent(inout) :: Q4(ngaus,ngaus,nvdf)    ! Q^4 Operator
+       real*8, intent(inout) :: T(ngaus,ngaus) ! Kinetic energy matrix.
+ !     PARAMETERS     
+       real*8,parameter    ::  a0 = 0.5291771D00      ! bohr radius
+       real*8,parameter    ::  pi = 2.0d0*acos(0.0d0) ! PI
+ !     Gauss-Hermite quadrature points for N=16.
+       real*8,parameter    ::  ghx16(16)=(/-4.688738939305818d+0,&
+                                     -3.869447904860123d+0,&
+                                     -3.176999161979960d+0,&
+                                     -2.546202157847480d+0,&
+                                     -1.951787990916254d+0,&
+                                     -1.380258539198882d+0,&
+                                    -0.8229514491446558d+0,&
+                                    -0.2734810461381524d+0,&
+                                     0.2734810461381525d+0,&
+                                     0.8229514491446560d+0,&
+                                      1.380258539198880d+0,&
+                                      1.951787990916254d+0,&
+                                      2.546202157847482d+0,&
+                                      3.176999161979959d+0,&
+                                      3.869447904860125d+0,&
+                                      4.688738939305819d+0 /)
+ !     LOCAL VARIABLES
+       real*8   :: Ai(ngaus) ! Auxiliary variable for integrals computation.
+       real*8   :: omega(nvdf)    ! Vibrational frequencies in AU.
+       real*8   :: ghQ(ngaus)! Scaled and translated Gauss-Hermite points.
+       real*8   :: A              ! Auxiliary variable for integrals computation.
+       real*8   :: B              ! Auxiliary variable for integrals computation.
+       real*8   :: C              ! Auxiliary variable for integrals computation.
+       real*8   :: D              ! Auxiliary variable for integrals computation.
+       integer  :: i,j            ! Indexes
+ !     ------------------------------------------------------------------
+       
+       write(77,'(A,I3)') 'ENTERING NORMAL OPERATOR BUILDER. NM = ',nm
+       
+ !     Scaling and displacing GH quadrature points
+       ghQ=0.0D0
+       omega = Sqrt(hii)
+       ghQ(:)=ghx16/Sqrt(omega(nm)*ABS(alpha(nm)))
+ 
+ !     Building gaussian parameters A(j,nm)
+       Ai(1) = gwidth*gwidth/(ghQ(2)-ghQ(1))**2
+       do j=2,ngaus-1
+          Ai(j) = 4.0D0*gwidth*gwidth/(ghQ(j+1)-ghQ(j-1))**2
+       end do 
+       Ai(ngaus) = gwidth*gwidth/(ghQ(ngaus)-ghQ(ngaus-1))**2
+
+
+       do i=1,ngaus
+          do j=i,ngaus
+             A=Sqrt(Sqrt(4.0D0*Ai(i)*Ai(j)/PI**2))
+             B=Sqrt(Ai(i)+Ai(j))
+             C=Ai(i)*Ai(j)*(ghQ(i)-ghQ(j))**2/B**2
+
+!            Careful here! D is defined differently in Normal coords than in Morse and SinH.
+!            The exponent of B IS supposed to be 1 here.
+             D=(Ai(i)*ghQ(i)+Ai(j)*ghQ(j))/B    
+             if (i == j) C=0d0
+
+ !           Overlap matrix
+             if (i /= j) then 
+                 S(i,j,nm)=Sqrt(PI)*A*Exp(-C)/B
+                 S(j,i,nm)=S(i,j,nm)
+             else
+                 S(i,i,nm) = 1d0
+             end if
+
+ !           Kinetic Energy matrix
+             T(i,j)=2.0d0*S(i,j,nm)*Ai(i)*Ai(j)*(-1.0D0+2.0D0*C)/B**2
+             if (i /= j) T(j,i)=T(i,j)
+
+ !           Q matrix elements
+             Q1(i,j,nm)=S(i,j,nm)*D/B
+             Q2(i,j,nm)=S(i,j,nm)*(1.0D0+2.0D0*D**2)*0.5d0/B**2
+             Q3(i,j,nm)=S(i,j,nm)*(3.0D0*D + 2.0d0*D**3)*0.5d0/B**3
+             Q4(i,j,nm)=S(i,j,nm)*(3.0D0+12.0D0*D**2+4.0D0*D**4)*0.25d0/B**4
+
+             if (i /= j) Q1(j,i,nm)=Q1(i,j,nm)
+             if (i /= j) Q2(j,i,nm)=Q2(i,j,nm)
+             if (i /= j) Q3(j,i,nm)=Q3(i,j,nm)
+             if (i /= j) Q4(j,i,nm)=Q4(i,j,nm)
+          end do
+       end do
+
+ !     ------------------------------------------------------------------
+ !     DEBUG
+ !     ------------------------------------------------------------------
+       write(77,'(A)') 'GAUSS-HERMITE POINTS'
+       write(77,'(16F11.3)') (ghQ(i),i=1,ngaus)
+       write(77,'(A)') 'Ai COEFFICIENTS'
+       write(77,'(16D11.3)') (Ai(i),i=1,ngaus)
+ !     ------------------------------------------------------------------
+
+       end subroutine
  
        subroutine buildoperators(hii,tiii,uiiii,gwidth,ngaus,nvdf,&
                      &S,Q1,Q2,Q3,Hcore)
@@ -2497,6 +2955,438 @@
  
        end subroutine
  
+       subroutine buildoperatorsPS(qva_nml,alpha,hii,tiii,uiiii,gwidth,ngaus,nvdf,&
+                     &S,Q1,Q2,Q3,sQ1,sQ2,sQ3,Hcore)
+       implicit none
+ 
+ !     ------------------------------------------------------------------
+       type(qva_nml_type), intent(in) :: qva_nml
+       integer, intent(in) :: ngaus  ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: nvdf   ! Number of vibrational degrees of freedom
+       real*8, intent(in)  :: alpha(nvdf)
+       real*8, intent(in)  :: hii(nvdf)   ! Hessian eigenvalues in AU.(d^2 V/dQi^2)
+       real*8, intent(in)  :: tiii(nvdf)  ! d^3 V/dQi^3
+       real*8, intent(in)  :: uiiii(nvdf) ! d^4 V/dQi^4
+       real*8, intent(in)  :: gwidth    ! Gaussian primitives width parameter. Default 0.5.
+       real*8, intent(out) :: S(ngaus,ngaus,nvdf)     ! Overlap Matrix
+       real*8, intent(out) :: Q1(ngaus,ngaus,nvdf)    ! Q^1 Operator
+       real*8, intent(out) :: Q2(ngaus,ngaus,nvdf)    ! Q^2 Operator
+       real*8, intent(out) :: Q3(ngaus,ngaus,nvdf)    ! Q^3 Operator
+       real*8, intent(out) :: sQ1(ngaus,ngaus,nvdf)    ! Q^1 Operator (sub)
+       real*8, intent(out) :: sQ2(ngaus,ngaus,nvdf)    ! Q^2 Operator (sub)
+       real*8, intent(out) :: sQ3(ngaus,ngaus,nvdf)    ! Q^3 Operator (sub)
+       real*8, intent(out) :: Hcore(ngaus,ngaus,nvdf) ! Core hamiltonian.
+ !     PARAMETERS     
+       real*8,parameter    ::  a0 = 0.5291771D00      ! bohr radius
+       real*8,parameter    ::  pi = 2.0d0*acos(0.0d0) ! PI
+ !     Gauss-Hermite quadrature points for N=16.
+       real*8,parameter    ::  ghx16(16)=(/-4.688738939305818d+0,&
+                                     -3.869447904860123d+0,&
+                                     -3.176999161979960d+0,&
+                                     -2.546202157847480d+0,&
+                                     -1.951787990916254d+0,&
+                                     -1.380258539198882d+0,&
+                                    -0.8229514491446558d+0,&
+                                    -0.2734810461381524d+0,&
+                                     0.2734810461381525d+0,&
+                                     0.8229514491446560d+0,&
+                                      1.380258539198880d+0,&
+                                      1.951787990916254d+0,&
+                                      2.546202157847482d+0,&
+                                      3.176999161979959d+0,&
+                                      3.869447904860125d+0,&
+                                      4.688738939305819d+0 /)
+ !     LOCAL VARIABLES
+       character(len=117) :: format1,format2
+       real*8   :: A              ! Auxiliary variable for integrals computation.
+       real*8   :: B              ! Auxiliary variable for integrals computation.
+       real*8   :: C              ! Auxiliary variable for integrals computation.
+       real*8   :: D              ! Auxiliary variable for integrals computation.
+       real*8   :: T(ngaus,ngaus) ! Kinetic energy matrix.
+       real*8   :: V(ngaus,ngaus) ! Diagonal potential.
+       real*8   :: Q4(ngaus,ngaus,nvdf) ! Auxiliary variable for integrals computation.
+       real*8   :: sQ4(ngaus,ngaus,nvdf) ! Auxiliary variable for integrals computation.
+       integer  :: i,j,nm         ! Indexes
+       integer  :: ierr
+       integer             :: nmorse, nsinh, npartsub
+       integer,allocatable :: morsemods(:), sinhmods(:), partsubdf(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac,partsubdf
+ !     ------------------------------------------------------------------
+ 
+       format1='(16D11.3)'
+       format2='(16F11.5)'
+ 
+ !     DISTRIBUTED GAUSSIAN BASIS SET
+ !     Gaussians are placed in Gauss-Hermite quadrature points, and 
+ !     scaled so their centers coincide with the nodes of an harmonic
+ !     oscillator wavefunction of vibrational quantum number equal to 
+ !     the number of gaussians specified by the user (only 16 for now). 
+ !     GH quadrature points were calculated using John Burkardt's code
+ !     which can be found at
+ !     people.sc.fsu.edu/~jburkardt/f_src/hermite_rule/hermite_rule.html
+ !     GH points ghx are scaled and displaced acording to
+ !     ghQ = ghx/Sqrt(omega_a)
+ !     Distributed Gaussians have the form
+ !     g(j,nm) = (2 A(j,nm)/pi)^1/4 exp[-A(j,nm)*(Qi-ghQ(j,nm))^2]
+ !     So to define the gaussian basis set we must define a set of
+ !     centers (GH points, ghQ) and widths (A(j,nm)).
+ !     For details see Hamilton & Light (1986)
+ 
+!      READING LIST OF NORMAL MODES INTO WHICH TO APPLY MORSE AND/OR SINH COORDS.
+!      THE LIST IS READ FROM A NAMELIST CALLED 'AUXCOORDS' INSIDE THE QUMVIA 
+!      COMMANDS INPUT FILE ALONGSIDE THE &QVA AND (POSSIBLY) &LIO NAMELISTS.
+
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+       npartsub = qva_nml%npartsub
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf),partsubdf(npartsub))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST WHILE BUILDING OPERATORS')
+       end if
+
+       if (nmorse > 0) then
+          write(77,'(A)') 'buildoperators2: MORSE COORDINATES WILL BE APPLIED TO NMODES: '
+          write(77,'(99I3)') morsemods
+       end if 
+       if (nsinh > 0) then
+          write(77,'(A)') 'buildoperators2: SINH COORDINATES WILL BE APPLIED TO NMODES: '
+          write(77,'(99I3)') sinhmods
+       end if
+
+       write(77,'(A)') '#########################################################'
+       write(77,'(A)') 'WARNING: VSCF OPERATORS USING PARTIAL SUBSTITUTION SCHEME'
+       write(77,'(A)') '#########################################################'
+       
+ !     Computing core hamiltonian and Q^n integrals.
+       S = 0.0D0
+       Q1 = 0.0D0
+       Q2 = 0.0D0
+       Q3 = 0.0D0
+       Q4 = 0.0D0
+       sQ1 = 0.0D0
+       sQ2 = 0.0D0
+       sQ3 = 0.0D0
+       sQ4 = 0.0D0
+ 
+       do nm=1,nvdf
+          T=0.0D0
+          if ( ANY(morsemods == nm) ) then
+             write(77,*) 'CALLING morseoperator subroutine'
+             call normaloperatorPS(nm,ngaus,nvdf,alpha,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+             call morseoperatorPS(nm,ngaus,nvdf,alpha,hii,gwidth,S,sQ1,sQ2,sQ3,sQ4)
+          else if ( ANY(sinhmods == nm) ) then
+             write(77,*) 'CALLING sinhoperator subroutine'
+             call normaloperatorPS(nm,ngaus,nvdf,alpha,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+             call sinhoperatorPS(nm,ngaus,nvdf,alpha,hii,gwidth,S,sQ1,sQ2,sQ3,sQ4)
+          else
+             write(77,*) 'CALLING normaloperator subroutine'
+             call normaloperator(nm,ngaus,nvdf,hii,gwidth,S,Q1,Q2,Q3,Q4,T)
+          end if 
+
+!         Building core hamiltonian
+          V=0d0
+          if (ANY(morsemods==nm) .OR. ANY(sinhmods==nm)) then
+             V(:,:) = hii(nm)*sQ2(:,:,nm)*0.5d0 + &
+                    & tiii(nm)*sQ3(:,:,nm)/6.0d0+ &
+                    & uiiii(nm)*sQ4(:,:,nm)/24.0d0
+          else
+             V(:,:) = hii(nm)*Q2(:,:,nm)*0.5d0 + &
+                    & tiii(nm)*Q3(:,:,nm)/6.0d0+ &
+                    & uiiii(nm)*Q4(:,:,nm)/24.0d0
+          end if
+          Hcore(:,:,nm) = -0.5d0*T(:,:) + V(:,:)
+
+ !        -----------------------------------------------------------------
+ !        DEBUG
+ !        -----------------------------------------------------------------
+ !        write(77,'(A)') 'PRINTING CORE POTENTIAL'
+ !        write(77,'(A,I3)') 'normal mode ',nm
+ !        do i=1,ngaus
+ !           write(77,format1) V(i,:)
+ !        end do
+          write(77,'(A)') 'PRINTING CORE POTENTIAL DIAGONAL'
+          write(77,format1) (V(i,i),i=1,ngaus)
+ !        -----------------------------------------------------------------
+       end do
+ !     -----------------------------------------------------------------
+ !     DEBUG
+ !     Hcore=Hcore*1.0d01
+ !     -----------------------------------------------------------------
+ !      write(77,'(A)') 'PRINTING CORE HAMILTONIAN'
+ !      write(77,'(A)') 'normal mode 1'
+ !      do i=1,ngaus
+ !         write(78,format2) Hcore(i,:,1)
+ !      end do
+ !      write(77,'(A)') 'normal mode 2'
+ !      do i=1,ngaus
+ !         write(77,format1) Hcore(i,:,2)
+ !      end do
+ !      write(77,'(A)') 'normal mode 3'
+ !      do i=1,ngaus
+ !         write(77,format1) Hcore(i,:,2)
+ !      end do
+ !
+ !
+ !      write(77,'(A)') 'PRINTING OVERLAP MATRIX'
+ !      do nm=1,1
+ !         write(77,'(A,I2)') 'normal mode ',nm
+ !         do i=1,ngaus
+ !            write(99,format2) S(i,:,nm)
+ !         end do
+ !      end do
+!      write(77,'(A)') 
+!      write(77,'(A)') 
+!      write(77,'(A)') 'PRINTING Q1 MATRIX'
+!      do nm=1,nvdf
+!         write(77,'(A,I2)') 'normal mode ',nm
+!         write(77,format1) Q1(:,:,nm)
+!      end do
+!      write(77,'(A)') 
+!      write(77,'(A)') 
+!      write(77,'(A)') 'PRINTING Q2 MATRIX'
+!      do nm=1,nvdf
+!         write(77,'(A,I2)') 'normal mode ',nm
+!         write(77,format1) Q2(:,:,nm)
+!      end do
+!      write(77,'(A)') 
+!      write(77,'(A)') 
+!      write(77,'(A)') 'PRINTING Q3 MATRIX'
+!      do nm=1,nvdf
+!         write(77,'(A,I2)') 'normal mode ',nm
+!         write(77,format1) Q3(:,:,nm)
+!      end do
+!      write(77,'(A)') 
+!      write(77,'(A)') 
+!      write(77,'(A)') 'PRINTING Q4 MATRIX'
+!      do nm=1,nvdf
+!         write(77,'(A,I2)') 'normal mode ',nm
+!         write(77,format1) Q4(:,:,nm)
+!      end do
+ !     ------------------------------------------------------------------
+ 
+       end subroutine
+
+
+       subroutine morseoperatorPS(nm,ngaus,nvdf,alpha,hii,gwidth,S,Q1,Q2,Q3,Q4)
+       implicit none
+
+ !     ------------------------------------------------------------------
+       integer, intent(in) :: nm     ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: ngaus  ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: nvdf   ! Number of vibrational degrees of freedom
+       real*8, intent(in)  :: alpha(nvdf)
+       real*8, intent(in)  :: hii(nvdf)   ! Hessian eigenvalues in AU.(d^2 V/dQi^2)
+       real*8, intent(in)  :: gwidth    ! Gaussian primitives width parameter. Default 0.5.
+       real*8, intent(in)  :: S(ngaus,ngaus,nvdf)     ! Overlap Matrix
+       real*8, intent(inout) :: Q1(ngaus,ngaus,nvdf)    ! Q^1 Operator
+       real*8, intent(inout) :: Q2(ngaus,ngaus,nvdf)    ! Q^2 Operator
+       real*8, intent(inout) :: Q3(ngaus,ngaus,nvdf)    ! Q^3 Operator
+       real*8, intent(inout) :: Q4(ngaus,ngaus,nvdf)    ! Q^4 Operator
+ !     PARAMETERS     
+!       real*8,parameter    ::  a0 = 0.5291771D00      ! bohr radius
+       real*8,parameter    ::  pi = 2.0d0*acos(0.0d0) ! PI
+ !     Gauss-Hermite quadrature points for N=16.
+       real*8,parameter    ::  ghx16(16)=(/-4.688738939305818d+0,&
+                                     -3.869447904860123d+0,&
+                                     -3.176999161979960d+0,&
+                                     -2.546202157847480d+0,&
+                                     -1.951787990916254d+0,&
+                                     -1.380258539198882d+0,&
+                                    -0.8229514491446558d+0,&
+                                    -0.2734810461381524d+0,&
+                                     0.2734810461381525d+0,&
+                                     0.8229514491446560d+0,&
+                                      1.380258539198880d+0,&
+                                      1.951787990916254d+0,&
+                                      2.546202157847482d+0,&
+                                      3.176999161979959d+0,&
+                                      3.869447904860125d+0,&
+                                      4.688738939305819d+0 /)
+ !     LOCAL VARIABLES
+       real*8   :: Ai(ngaus) ! Auxiliary variable for integrals computation.
+       real*8   :: omega(nvdf)    ! Vibrational frequencies in AU.
+       real*8   :: ghQ(ngaus)! Scaled and translated Gauss-Hermite points.
+       real*8   :: A              ! Auxiliary variable for integrals computation.
+       real*8   :: B              ! Auxiliary variable for integrals computation.
+       real*8   :: C              ! Auxiliary variable for integrals computation.
+       real*8   :: D              ! Auxiliary variable for integrals computation.
+       real*8   :: E              ! Auxiliary variable for integrals computation.
+       real*8   :: I1             ! Auxiliary variable for integrals computation.
+       real*8   :: I2             ! Auxiliary variable for integrals computation.
+       real*8   :: M1             ! Auxiliary variable for integrals computation.
+       real*8   :: M2             ! Auxiliary variable for integrals computation.
+       real*8   :: M3             ! Auxiliary variable for integrals computation.
+       real*8   :: M4             ! Auxiliary variable for integrals computation.
+       integer  :: i,j            ! Indexes
+ !     ------------------------------------------------------------------
+
+       write(77,'(A,I3)') 'ENTERING MORSE OPERATOR BUILDER. NM = ',nm
+       write(77,'(A,D15.8)') 'alpha(nm) =  ',alpha(nm)
+       
+ !     Scaling and displacing GH quadrature points
+       ghQ=0.0D0
+       omega = Sqrt(hii)
+       ghQ(:)=ghx16/Sqrt(omega(nm)*ABS(alpha(nm)))
+ 
+ !     Building gaussian parameters A(j,nm)
+       Ai(1) = gwidth*gwidth/(ghQ(2)-ghQ(1))**2
+       do j=2,ngaus-1
+          Ai(j) = 4.0D0*gwidth*gwidth/(ghQ(j+1)-ghQ(j-1))**2
+       end do 
+       Ai(ngaus) = gwidth*gwidth/(ghQ(ngaus)-ghQ(ngaus-1))**2
+
+       do i=1,ngaus
+          do j=i,ngaus
+
+             A=Sqrt(Sqrt(4.0D0*Ai(i)*Ai(j)/PI**2))
+             B=Sqrt(Ai(i)+Ai(j))
+             C=Ai(i)*Ai(j)*(ghQ(i)-ghQ(j))**2/B**2
+             if (i == j) C=0d0
+             D=(Ai(i)*ghQ(i)+Ai(j)*ghQ(j))/(Ai(i)+Ai(j))
+             E=(0.5d0*alpha(nm)/B)**2
+
+ !           Q matrix elements
+             M1=Exp(E - D*alpha(nm))
+             M2=Exp( 4d0*E - 2d0*D*alpha(nm))
+             M3=Exp( 9d0*E - 3d0*D*alpha(nm))
+             M4=Exp(16d0*E - 4d0*D*alpha(nm))
+
+             Q1(i,j,nm)=S(i,j,nm)*(1d0-M1)
+             Q2(i,j,nm)=S(i,j,nm)*(1d0-2d0*M1+M2)
+             Q3(i,j,nm)=S(i,j,nm)*(1d0-3d0*M1+3d0*M2-M3)
+             Q4(i,j,nm)=S(i,j,nm)*(1d0-4d0*M1+6d0*M2-4d0*M3+M4)
+
+             if (i /= j) Q1(j,i,nm)=Q1(i,j,nm)
+             if (i /= j) Q2(j,i,nm)=Q2(i,j,nm)
+             if (i /= j) Q3(j,i,nm)=Q3(i,j,nm)
+             if (i /= j) Q4(j,i,nm)=Q4(i,j,nm)
+
+          end do
+       end do
+
+ !     ------------------------------------------------------------------
+ !     DEBUG
+ !     ------------------------------------------------------------------
+       write(77,'(A)') 'GAUSS-HERMITE POINTS'
+       write(77,'(16F11.3)') (ghQ(i),i=1,ngaus)
+       write(77,'(A)') 'Ai COEFFICIENTS'
+       write(77,'(16D11.3)') (Ai(i),i=1,ngaus)
+ !     ------------------------------------------------------------------
+       end subroutine
+
+
+       subroutine sinhoperatorPS(nm,ngaus,nvdf,alpha,hii,gwidth,S,Q1,Q2,Q3,Q4)
+       implicit none
+
+ !     ------------------------------------------------------------------
+       integer, intent(in) :: nm     ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: ngaus  ! Number of primitive gaussian basis functions.
+       integer, intent(in) :: nvdf   ! Number of vibrational degrees of freedom
+       real*8, intent(in)  :: alpha(nvdf)
+       real*8, intent(in)  :: hii(nvdf)   ! Hessian eigenvalues in AU.(d^2 V/dQi^2)
+       real*8, intent(in)  :: gwidth    ! Gaussian primitives width parameter. Default 0.5.
+       real*8, intent(in)  :: S(ngaus,ngaus,nvdf)     ! Overlap Matrix
+       real*8, intent(inout) :: Q1(ngaus,ngaus,nvdf)    ! Q^1 Operator
+       real*8, intent(inout) :: Q2(ngaus,ngaus,nvdf)    ! Q^2 Operator
+       real*8, intent(inout) :: Q3(ngaus,ngaus,nvdf)    ! Q^3 Operator
+       real*8, intent(inout) :: Q4(ngaus,ngaus,nvdf)    ! Q^4 Operator
+ !     PARAMETERS     
+       real*8,parameter    ::  a0 = 0.5291771D00      ! bohr radius
+       real*8,parameter    ::  pi = 2.0d0*acos(0.0d0) ! PI
+ !     Gauss-Hermite quadrature points for N=16.
+       real*8,parameter    ::  ghx16(16)=(/-4.688738939305818d+0,&
+                                     -3.869447904860123d+0,&
+                                     -3.176999161979960d+0,&
+                                     -2.546202157847480d+0,&
+                                     -1.951787990916254d+0,&
+                                     -1.380258539198882d+0,&
+                                    -0.8229514491446558d+0,&
+                                    -0.2734810461381524d+0,&
+                                     0.2734810461381525d+0,&
+                                     0.8229514491446560d+0,&
+                                      1.380258539198880d+0,&
+                                      1.951787990916254d+0,&
+                                      2.546202157847482d+0,&
+                                      3.176999161979959d+0,&
+                                      3.869447904860125d+0,&
+                                      4.688738939305819d+0 /)
+ !     LOCAL VARIABLES
+       real*8   :: Ai(ngaus) ! Auxiliary variable for integrals computation.
+       real*8   :: omega(nvdf)    ! Vibrational frequencies in AU.
+       real*8   :: ghQ(ngaus)! Scaled and translated Gauss-Hermite points.
+       real*8   :: A              ! Auxiliary variable for integrals computation.
+       real*8   :: B              ! Auxiliary variable for integrals computation.
+       real*8   :: C              ! Auxiliary variable for integrals computation.
+       real*8   :: D              ! Auxiliary variable for integrals computation.
+       real*8   :: E              ! Auxiliary variable for integrals computation.
+       real*8   :: H1             ! Auxiliary variable for integrals computation.
+       real*8   :: H2             ! Auxiliary variable for integrals computation.
+       real*8   :: H3             ! Auxiliary variable for integrals computation.
+       real*8   :: H4             ! Auxiliary variable for integrals computation.
+       integer  :: i,j            ! Indexes
+ !     ------------------------------------------------------------------
+       
+       write(77,'(A,I3)') 'ENTERING SINH OPERATOR BUILDER. NM = ',nm
+       write(77,'(A,D15.8)') 'alpha(nm) =  ',alpha(nm)
+       
+ !     Scaling and displacing GH quadrature points
+       ghQ=0.0D0
+       omega = Sqrt(hii)
+       ghQ(:)=ghx16/Sqrt(omega(nm)*alpha(nm))
+ 
+ !     Building gaussian parameters A(j,nm)
+       Ai=0d0
+       Ai(1) = gwidth*gwidth/(ghQ(2)-ghQ(1))**2
+       do j=2,ngaus-1
+          Ai(j) = 4.0D0*gwidth*gwidth/(ghQ(j+1)-ghQ(j-1))**2
+       end do 
+       Ai(ngaus) = gwidth*gwidth/(ghQ(ngaus)-ghQ(ngaus-1))**2
+ 
+
+       do i=1,ngaus
+          do j=i,ngaus
+
+             A=Sqrt(Sqrt(4.0D0*Ai(i)*Ai(j)/PI**2))
+             B=Sqrt(Ai(i)+Ai(j))
+             C=Ai(i)*Ai(j)*(ghQ(i)-ghQ(j))**2/B**2
+             if (i == j) C=0d0
+             D=(Ai(i)*ghQ(i)+Ai(j)*ghQ(j))/(Ai(i)+Ai(j))
+             E=(0.5d0*alpha(nm)/B)**2
+
+ !           Q matrix elements
+             H1=Exp( E )    * Sinh( D*alpha(nm) )
+             H2=Exp(4d0 *E) * Cosh(2d0*D*alpha(nm))
+             H3=Exp(9d0 *E) * Sinh(3d0*D*alpha(nm))
+             H4=Exp(16d0*E) * Cosh(4d0*D*alpha(nm))
+
+             Q1(i,j,nm)=S(i,j,nm)*H1
+             Q2(i,j,nm)=-0.5d0*S(i,j,nm)*(1d0-H2)
+             Q3(i,j,nm)=-(1d0/4d0)*S(i,j,nm)*(3d0*H1-H3)
+             Q4(i,j,nm)=(1d0/8d0)*S(i,j,nm)*(3d0-4d0*H2+H4)
+
+             if (i /= j) Q1(j,i,nm)=Q1(i,j,nm)
+             if (i /= j) Q2(j,i,nm)=Q2(i,j,nm)
+             if (i /= j) Q3(j,i,nm)=Q3(i,j,nm)
+             if (i /= j) Q4(j,i,nm)=Q4(i,j,nm)
+
+          end do
+       end do
+
+ !     ------------------------------------------------------------------
+ !     DEBUG
+ !     ------------------------------------------------------------------
+       write(77,'(A)') 'GAUSS-HERMITE POINTS'
+       write(77,'(16F11.3)') (ghQ(i),i=1,ngaus)
+       write(77,'(A)') 'Ai COEFFICIENTS'
+       write(77,'(16D11.3)') (Ai(i),i=1,ngaus)
+ !     ------------------------------------------------------------------
+       end subroutine
+
        subroutine cholesky(S,nvdf,ngaus,Scho,IScho)
  !     ------------------------------------------------------------------
  !     This subroutine computes S**(-1/2) using the following steps
@@ -3667,7 +4557,7 @@
  
  !     Build Core Hamiltonian and Qi^n matrices.
        if (qva_nml%nmorse > 0 .OR. qva_nml%nsinh > 0) then
-!         If morse and sinh coordinates are required along normal coords.
+!         If morse or sinh coordinates are required along normal coords.
           call buildoperators2(qva_nml,alpha,hii,tiii,uiiii,gwidth,ngaus,nvdf,&
                              & S,Q1,Q2,Q3,Hcore)
        else
@@ -3771,6 +4661,236 @@
  
        end subroutine
  
+       subroutine ssvscfps(ref,nmodes,eig,dy,nmcoup,gwidth,nqmatoms,nclatoms,&
+                    &ngaus,qmcoords,clcoords,at_numbers,ndf,nvdf,&
+                    &P,Po,Scho,Evscf,Q1,Q2,Q3,sQ1,sQ2,sQ3,Hcore,GDmtrx,GTmtrx,Emod,&
+                    &hii,tiii,uiiii,tiij,tjji,uiiij,ujjji,uiijj,&
+                    &tijk,uiijk,uijjk,uijkk,vscfstat,qva_nml,alpha)
+ 
+       implicit none
+ 
+       type(qva_nml_type),intent(in) :: qva_nml
+       integer,intent(in)  :: ref(4)               ! Reference state          
+       integer,intent(in)  :: ndf                  ! Number of classical atoms
+       integer,intent(in)  :: nvdf                 ! Number of classical atoms
+       integer,intent(in)  :: ngaus                ! Number of classical atoms
+       integer,intent(in)  :: nmcoup               ! Number of normal modes to couple in QFF.
+       integer,intent(in)  :: nqmatoms             ! Number of QM atoms
+       integer,intent(in)  :: nclatoms             ! Number of classical atoms
+       integer,intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+       integer, intent(out):: vscfstat
+       real*8, intent(in)  :: alpha(nvdf)          ! Alpha factors for Morse/Sinh coords
+       real*8, intent(in)  :: dy                   ! Step size factor for num derivatives.
+       real*8, intent(in)  :: gwidth               ! Width factor for gaussian primitives.
+       real*8, intent(in)  :: eig(ndf)             ! Eigenvalues of the hessian matrix.
+       real*8, intent(in)  :: nmodes(ndf,ndf)      ! Eigenvectors of the hessian matrix.
+       real*8, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
+       real*8, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
+       real*8, intent(in)  :: hii(ndf)             ! Diagonal Hessian eigenvalues.
+       real*8, intent(in)  :: tiii(nvdf)           ! Diagonal cubic coupling terms
+       real*8, intent(in)  :: uiiii(nvdf)          ! Diagonal quartic coupling terms
+       real*8, intent(in)  :: tiij(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8, intent(in)  :: tjji(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8, intent(in)  :: uiiij(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8, intent(in)  :: ujjji(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8, intent(in)  :: uiijj(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8, intent(in)  :: tijk(nvdf,nvdf,nvdf)  ! 3-mode quartic coupling trms.
+       real*8, intent(in)  :: uiijk(nvdf,nvdf,nvdf) ! 3-mode quartic coupling trms.
+       real*8, intent(in)  :: uijjk(nvdf,nvdf,nvdf) ! 3-mode quartic coupling trms.
+       real*8, intent(in)  :: uijkk(nvdf,nvdf,nvdf) ! 3-mode quartic coupling trms.
+       real*8, intent(out) :: GDmtrx(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8, intent(out) :: GTmtrx(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8, intent(out) :: Emod(ngaus,nvdf)       ! Modal energies.
+       real*8, intent(out) :: P(ngaus,ngaus,nvdf)  ! Modals coeficient matrices.
+       real*8, intent(out) :: Po(ngaus,ngaus,nvdf)  ! Modals coeficient matrices.
+       real*8, intent(out) :: Scho(ngaus,ngaus,nvdf)  ! Cholesky factor.
+       real*8, intent(out) :: Evscf                ! VSCF energy.
+       real*8, intent(out) :: Q1(ngaus,ngaus,nvdf) !  <gi|Qa^1|gj> matrix
+       real*8, intent(out) :: Q2(ngaus,ngaus,nvdf) !  <gi|Qa^2|gj> matrix
+       real*8, intent(out) :: Q3(ngaus,ngaus,nvdf) !  <gi|Qa^3|gj> matrix
+       real*8, intent(out) :: sQ1(ngaus,ngaus,nvdf) !  <gi|Qa^1|gj> matrix
+       real*8, intent(out) :: sQ2(ngaus,ngaus,nvdf) !  <gi|Qa^2|gj> matrix
+       real*8, intent(out) :: sQ3(ngaus,ngaus,nvdf) !  <gi|Qa^3|gj> matrix
+       real*8, intent(out) :: Hcore(ngaus,ngaus,nvdf) ! Core Hamiltonian (non-orthogonal basis)
+ !     LOCAL VARIABLES      
+       integer     :: psi(nvdf)            ! Reference state          
+       integer     :: INFO                   ! Error code for dsygst subroutine.
+       integer     :: iter                   ! Multipurpose indexes.
+       integer     :: i,j,k                  ! Multipurpose indexes.
+       integer     :: nm1,nm2,nm,at,ex       ! Multipurpose indexes.
+       integer     :: qn1,qn2
+       real*8      :: nmdes(ndf,ndf)         ! Eigenvectors of the hessian matrix.
+       real*8      :: X0(ndf)                ! Initial geometry in cartesian coords and AU.
+       real*8      :: X0m(ndf)               ! Initial geometry in mass-weighted cart coords (AU).
+       real*8      :: Q0(nvdf)               ! Initial geomtetry in normal coords and AU.
+       real*8      :: Mass(ndf)                 ! Sqrt(mass_i) diagonal matrix.
+       real*8      :: L(ndf,nvdf)            ! Normal mode matrix.
+       real*8      :: ll(ndf)                ! Dummy variable. Normal mode vector
+       real*8      :: S(ngaus,ngaus,nvdf)    ! Overlap matrix.
+       real*8      :: IScho(ngaus,ngaus,nvdf)! Inverse of Cholesky factor of S.
+       real*8      :: Evscf_old              ! VSCF energy.
+       real*8      :: fnd_trans(nvdf)        ! VSCF virtual energy.
+       real*8      :: Gmtrx(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8      :: F(ngaus,ngaus,nvdf)    ! Effective potential matrix.
+       real*8      :: tmp(ngaus)             ! Auxiliary variable for computing vef
+       real*8      :: corr                   ! Auxiliary variable for computing vef
+       real*8      :: corrD                  ! Auxiliary variable for computing vef
+       real*8      :: corrT                  ! Auxiliary variable for computing vef
+       real*8      :: Gtmp(ngaus,ngaus)
+       real*8      :: tScho(ngaus,ngaus)
+       real*8      :: Ptmp(ngaus)
+       real*8      :: Ediag(nvdf+1)
+       real*8      :: Evhf(nvdf+1)
+       real*8      :: harm
+ !     -----------------------------------------------------------------
+ !     DEBUG
+ !     -----------------------------------------------------------------
+       real*8      :: Vdavg    !  <psi_0|Vc2MC|psi_0>
+       real*8      :: Vtavg    !  <psi_0|Vc3MC|psi_0>
+       real*8      :: veff2avg ! <psi_0|veff2MC|psi_0>
+       real*8      :: veff3avg ! <psi_0|veff3MC|psi_0>
+       real*8      :: vtmp
+ !     -----------------------------------------------------------------
+ !     FUNCTIONS
+       real*8,external :: ddot 
+ !     PARAMETERS
+       real*8, parameter :: hartree2cm = 219474.63d0 ! cm-1/Ha
+       include "qvmbia_param.f"
+ !----------------------------------------------------------------------
+ !----------------------------------------------------------------------
+ 
+ !     ngaus=16
+ !     ndf  = 3*nqmatoms
+ !     nvdf = ndf-6
+ !     dy=0.5d0
+ !     -----------------------------------------------------------------
+ !     INITIAL GUESS
+ !     -----------------------------------------------------------------
+ !     Eliminating rotational and translational degrees of freedom.
+ !     DANGER
+ !      do nm=7,ndf
+ !         hii(nm-6)=eig(nm)
+ !      end do
+       vscfstat=0
+ 
+       nm1=ref(1)
+       qn1=ref(2)
+       nm2=ref(3)
+       qn2=ref(4)
+ 
+       psi=0
+       if (nm1 /= 0) psi(nm1) = qn1
+       if (nm2 /= 0) psi(nm2) = qn2
+ 
+ !     Build Core Hamiltonian and Qi^n matrices.
+       if (qva_nml%nmorse > 0 .OR. qva_nml%nsinh > 0) then
+!         If morse or sinh coordinates are required along normal coords.
+          call buildoperatorsPS(qva_nml,alpha,hii,tiii,uiiii,gwidth,ngaus,nvdf,&
+                             &S,Q1,Q2,Q3,sQ1,sQ2,sQ3,Hcore)
+       else
+!         If only normal coods are required.
+          call buildoperators(hii,tiii,uiiii,gwidth,ngaus,nvdf,S,Q1,Q2,Q3,Hcore)
+       end if 
+       
+ !     Compute Cholesky decomposition and the inverse of the cholesky
+ !     factor.
+       call cholesky(S,nvdf,ngaus,Scho,IScho)
+ 
+ 
+ !     Transform core hamiltonian using IScho and diagonalize. Return
+ !     transformed back eigenvectors coeficients and eigenvalues.
+       call solveGEV(Hcore,Scho,IScho,nvdf,ngaus,P,Po,Emod)
+      
+       Evscf=0.0D0
+       do nm=1,nvdf
+          if (nm == nm1) then
+             Evscf = Evscf + Emod(qn1+1,nm)
+          else if (nm == nm2) then
+             Evscf = Evscf + Emod(qn2+1,nm)
+          else
+             Evscf = Evscf + Emod(1,nm)
+          end if
+       end do
+ 
+       write(77,*)
+       write(77,'(A,8I3)') 'INITIAL GUESS ENERGY FOR REFERENCE STATE',ref
+       write(77,'(F16.2)') Evscf*hartree2cm
+ 
+ 
+ !     -----------------------------------------------------------------
+ !     VSCF ITERATIONS
+ !     -----------------------------------------------------------------
+ !     BEGINING VSCF ITERATIONS
+ 
+       iter=1
+       write(77,*)
+       write(77,'(A)') 'ITER     Evscf   MP1 CORRECTIONS'
+       write(77,'(A)') '----------------------------------------------'
+       DO ! Begin infinite loop.
+ 
+ !        Build effective potential matrix G
+          Gmtrx=0.0d0
+          Emod=0.0d0
+          call ssVeffPS(qva_nml,ref,Po,Q1,Q2,Q3,sQ1,sQ2,sQ3,Scho, &
+                    &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                    &nvdf,ngaus,Gmtrx,GDmtrx,GTmtrx)
+ 
+ !        Build fock matrix.
+          F = Hcore + Gmtrx
+ 
+ !        Transform core hamiltonian using IScho and diagonalize. Return
+ !        transformed back eigenvectors coeficients and eigenvalues.
+          Evscf_old=Evscf
+          call solveGEV(F,Scho,IScho,nvdf,ngaus,P,Po,Emod)
+ 
+ !        Compute ssVSCF energy for ref state in this iteration.
+ 
+          Evscf=0.0D0
+          do nm=1,nvdf
+             if (nm == nm1) then
+                Evscf = Evscf + Emod(qn1+1,nm)
+             else if (nm == nm2) then
+                Evscf = Evscf + Emod(qn2+1,nm)
+             else
+                Evscf = Evscf + Emod(1,nm)
+             end if
+          end do
+ 
+ 
+ !        Compute VSCF correction for double counting.
+          call ssvscfcorrPS(ref,qva_nml,Scho,Po,Q1,Q2,Q3,sQ1,sQ2,sQ3,&
+                   & tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                   & nvdf,ngaus,corr,corrD,corrT)
+ 
+ !        Write to file iteration information.
+          write(77,'(I3,F13.8,2F15.8)') iter,Evscf,corrD,corrT
+ 
+          Evscf = Evscf - corr
+ !         if (iter >= 60) STOP('VSCF DID NOT CONVERGE: Too many iterations.')
+          if (iter >= 60) then
+             write(77,'(A)') 'VSCF DID NOT CONVERGE: Too many iterations.'
+             vscfstat=1
+             EXIT
+          end if
+          iter=iter+1
+ 
+ !        TEST FOR CONVERGENCE.
+          if (Abs(Evscf_old-Evscf) < 1.0D-9) EXIT
+       END DO
+ 
+       write(77,'(A)') '----------------------------------------------'
+       write(77,'(A,I3,A)') 'VSCF CONVERGED IN ',iter-1,' ITERATIONS'
+       write(77,*)
+ 
+       Evscf=Evscf*hartree2cm
+       write(77,'(A)')      '------------------------------------'
+       write(77,'(A,4I3)') 'ssVSCF ENERGY AT REF STATE',ref
+       write(77,'(F16.2)') Evscf
+       write(77,'(A)')      '------------------------------------'
+ 
+       end subroutine
+
+
        subroutine ssVeff2(ref,Po,Q1,Q2,Q3,Scho,tiij,tjji,uiiij,ujjji,uiijj,&
                     &tijk,uiijk,uijjk,uijkk,nvdf,ngaus,Gmtrx,GDmtrx,GTmtrx)
  !     --------------------------------------------------------------
@@ -3975,6 +5095,327 @@
                    
        end subroutine
  
+       subroutine ssVeffPS(qva_nml,ref,Po,Q1,Q2,Q3,sQ1,sQ2,sQ3,Scho, &
+                    &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                    &nvdf,ngaus,Gmtrx,GDmtrx,GTmtrx)
+ !     --------------------------------------------------------------
+ !     COMPUTE VSCF EFFECTIVE POTENTIAL MATRIX "G"
+ !     --------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type),intent(in) :: qva_nml
+       integer,intent(in) :: ref(4)               ! Reference state          
+       integer,intent(in) :: nvdf
+       integer,intent(in) :: ngaus
+       real*8,intent(in)  :: Po(ngaus,ngaus,nvdf)
+       real*8,intent(in)  :: Q1(ngaus,ngaus,nvdf)
+       real*8,intent(in)  :: Q2(ngaus,ngaus,nvdf)
+       real*8,intent(in)  :: Q3(ngaus,ngaus,nvdf)
+       real*8,intent(in)  :: sQ1(ngaus,ngaus,nvdf)
+       real*8,intent(in)  :: sQ2(ngaus,ngaus,nvdf)
+       real*8,intent(in)  :: sQ3(ngaus,ngaus,nvdf)
+       real*8,intent(in)  :: Scho(ngaus,ngaus,nvdf)
+       real*8,intent(in)  :: tiij(nvdf,nvdf)
+       real*8,intent(in)  :: tjji(nvdf,nvdf)
+       real*8,intent(in)  :: uiiij(nvdf,nvdf)
+       real*8,intent(in)  :: ujjji(nvdf,nvdf)
+       real*8,intent(in)  :: uiijj(nvdf,nvdf)
+       real*8,intent(in)  :: tijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)  :: uiijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)  :: uijjk(nvdf,nvdf,nvdf)
+       real*8,intent(in)  :: uijkk(nvdf,nvdf,nvdf)
+       real*8,intent(out) :: Gmtrx(ngaus,ngaus,nvdf)
+       real*8,intent(out) :: GDmtrx(ngaus,ngaus,nvdf)
+       real*8,intent(out) :: GTmtrx(ngaus,ngaus,nvdf)
+ 
+       integer :: nm,nm1,nm2,nm3,n1,n2,n3
+       integer :: nnm1,nnm2,qn1,qn2
+       integer :: INFO,ierr
+       real*8  :: Coef1
+       real*8  :: Coef2
+       real*8  :: Coef3
+       real*8  :: tmp(ngaus)
+       real*8  :: Q1avg(nvdf)
+       real*8  :: Q2avg(nvdf)
+       real*8  :: Q3avg(nvdf)
+       real*8  :: sQ1avg(nvdf)
+       real*8  :: sQ2avg(nvdf)
+       real*8  :: sQ3avg(nvdf)
+       real*8  :: tScho(ngaus,ngaus)
+       real*8  :: Qtmp(ngaus,ngaus)
+       real*8  :: Pt(ngaus)
+       real*8,external :: ddot
+       integer             :: nmorse, nsinh, npartsub
+       integer,allocatable :: morsemods(:), sinhmods(:), partsubdf(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac,partsubdf
+ !     --------------------------------------------------------------
+       Q1avg=0d0
+       Q2avg=0d0
+       Q3avg=0d0
+       sQ1avg=0d0
+       sQ2avg=0d0
+       sQ3avg=0d0
+ 
+       nnm1=ref(1)
+       qn1=ref(2)
+       nnm2=ref(3)
+       qn2=ref(4)
+ 
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+       npartsub = qva_nml%npartsub
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf),partsubdf(npartsub))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST WHILE BUILDING OPERATORS')
+       end if
+
+ !     ------------------------------------------------------------------
+ !     COMPUTING AVERAGES OF QM OPERATORS OVER MODALS
+ !     ------------------------------------------------------------------
+ !     Computing average normal coordinate operators over ground state modals
+ !                           <phi_a|(Q_a)**n|phi_a>
+       do nm=1,nvdf
+ 
+          Pt=0.0d0
+          if (nm == nnm1) then
+             Pt=Po(:,qn1+1,nm)
+          else if (nm == nnm2) then
+             Pt=Po(:,qn2+1,nm)
+          else
+             Pt=Po(:,1,nm)
+          end if
+          tScho=Scho(:,:,nm)
+ 
+          tmp=0.0d0
+          Qtmp=Q1(:,:,nm)
+          call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix transformation')
+          call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Pt,1,0.0D0,tmp,1)
+          Q1avg(nm) = ddot(ngaus,Pt,1,tmp,1)
+ 
+          tmp=0.0d0
+          Qtmp=Q2(:,:,nm)
+          call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix transformation')
+          call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Pt,1,0.0D0,tmp,1)
+          Q2avg(nm) = ddot(ngaus,Pt,1,tmp,1)
+ 
+          tmp=0.0d0
+          Qtmp=Q3(:,:,nm)
+          call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix transformation')
+          call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Pt,1,0.0D0,tmp,1)
+          Q3avg(nm) = ddot(ngaus,Pt,1,tmp,1)
+ 
+          if (ANY(partsubdf==nm)) then
+             tmp=0.0d0
+             Qtmp=sQ1(:,:,nm)
+             call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+             if (INFO /= 0) STOP('Error during Matrix transformation')
+             call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Pt,1,0.0D0,tmp,1)
+             sQ1avg(nm) = ddot(ngaus,Pt,1,tmp,1)
+    
+             tmp=0.0d0
+             Qtmp=sQ2(:,:,nm)
+             call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+             if (INFO /= 0) STOP('Error during Matrix transformation')
+             call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Pt,1,0.0D0,tmp,1)
+             sQ2avg(nm) = ddot(ngaus,Pt,1,tmp,1)
+    
+             tmp=0.0d0
+             Qtmp=sQ3(:,:,nm)
+             call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+             if (INFO /= 0) STOP('Error during Matrix transformation')
+             call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Pt,1,0.0D0,tmp,1)
+             sQ3avg(nm) = ddot(ngaus,Pt,1,tmp,1)
+          end if
+       end do
+ 
+ !     Computing vscf effective potential matrix G
+ !     ------------------------------------------------------------------
+ !     BEGINING COMPUTATION OF 2 MODE COUPLING TERMS
+ !     ------------------------------------------------------------------
+       GDmtrx=0.0d0
+       GTmtrx=0.0d0
+       do nm1=1,nvdf
+          do nm2=1,nvdf
+             if (nm1 == nm2) CYCLE
+             if (nm1 > nm2) then
+                n1=nm2
+                n2=nm1
+ 
+                Coef1=0.0d0
+                Coef2=0.0d0
+                Coef3=0.0d0
+ 
+                if (ANY(partsubdf==nm1) .AND. ANY(partsubdf==nm2)) then
+                   Coef1=tiij(n1,n2)*sQ2avg(n1)/2d0+uiiij(n1,n2)*sQ3avg(n1)/6d0
+                   Coef2=tjji(n1,n2)*sQ1avg(n1)/2d0+uiijj(n1,n2)*sQ2avg(n1)/4d0
+                   Coef3=ujjji(n1,n2)*sQ1avg(n1)/6d0
+    
+                   GDmtrx(:,:,nm1)=GDmtrx(:,:,n2)+&
+                                &Coef1*sQ1(:,:,n2)+&
+                                &Coef2*sQ2(:,:,n2)+&
+                                &Coef3*sQ3(:,:,n2)
+                else
+                   Coef1=tiij(n1,n2)*Q2avg(n1)/2d0+uiiij(n1,n2)*Q3avg(n1)/6d0
+                   Coef2=tjji(n1,n2)*Q1avg(n1)/2d0+uiijj(n1,n2)*Q2avg(n1)/4d0
+                   Coef3=ujjji(n1,n2)*Q1avg(n1)/6d0
+    
+                   GDmtrx(:,:,nm1)=GDmtrx(:,:,n2)+&
+                                &Coef1*Q1(:,:,n2)+&
+                                &Coef2*Q2(:,:,n2)+&
+                                &Coef3*Q3(:,:,n2)
+                end if
+             else
+                n1=nm1
+                n2=nm2
+ 
+                Coef1=0.0d0
+                Coef2=0.0d0
+                Coef3=0.0d0
+ 
+                if (ANY(partsubdf==nm1) .AND. ANY(partsubdf==nm2)) then
+                   Coef1=tjji(n1,n2)*sQ2avg(n2)/2d0+ujjji(n1,n2)*sQ3avg(n2)/6d0
+                   Coef2=tiij(n1,n2)*sQ1avg(n2)/2d0+uiijj(n1,n2)*sQ2avg(n2)/4d0
+                   Coef3=uiiij(n1,n2)*sQ1avg(n2)/6d0
+    
+                   GDmtrx(:,:,nm1)=GDmtrx(:,:,n1)+&
+                                &Coef1*sQ1(:,:,n1)+&
+                                &Coef2*sQ2(:,:,n1)+&
+                                &Coef3*sQ3(:,:,n1)
+                else
+                   Coef1=tjji(n1,n2)*Q2avg(n2)/2d0+ujjji(n1,n2)*Q3avg(n2)/6d0
+                   Coef2=tiij(n1,n2)*Q1avg(n2)/2d0+uiijj(n1,n2)*Q2avg(n2)/4d0
+                   Coef3=uiiij(n1,n2)*Q1avg(n2)/6d0
+    
+                   GDmtrx(:,:,nm1)=GDmtrx(:,:,n1)+&
+                                &Coef1*Q1(:,:,n1)+&
+                                &Coef2*Q2(:,:,n1)+&
+                                &Coef3*Q3(:,:,n1)
+                end if
+             end if
+          end do
+       end do
+ 
+ !     ------------------------------------------------------------------
+ !     BEGINING COMPUTATION OF 3 MODE COUPLING TERMS
+ !     ------------------------------------------------------------------
+       do nm1=1,nvdf
+          do nm2=1,nvdf-1
+             do nm3=nm2+1,nvdf
+                if (nm1 == nm2) CYCLE
+                if (nm1 == nm3) CYCLE
+                if (nm1<nm2) then
+                   n1=nm1
+                   n2=nm2
+                   n3=nm3
+ 
+                   coef1=0d0 
+                   coef2=0d0
+    
+                   if (ANY(partsubdf==nm1) .AND. &
+                     & ANY(partsubdf==nm2) .AND. &
+                     & ANY(partsubdf==nm3)) then
+                      coef1=tijk(n1,n2,n3)*sQ1avg(n2)*sQ1avg(n3)+&
+                           &uijjk(n1,n2,n3)*sQ2avg(n2)*sQ1avg(n3)/2d0+&
+                           &uijkk(n1,n2,n3)*sQ1avg(n2)*sQ2avg(n3)/2d0
+       
+                      coef2=uiijk(n1,n2,n3)*sQ1avg(n2)*sQ1avg(n3)/2d0
+       
+                      GTmtrx(:,:,n1)=GTmtrx(:,:,n1)+&
+                                  &coef1*sQ1(:,:,n1)+&
+                                  &coef2*sQ2(:,:,n1)
+                   else 
+                      coef1=tijk(n1,n2,n3)*Q1avg(n2)*Q1avg(n3)+&
+                           &uijjk(n1,n2,n3)*Q2avg(n2)*Q1avg(n3)/2d0+&
+                           &uijkk(n1,n2,n3)*Q1avg(n2)*Q2avg(n3)/2d0
+       
+                      coef2=uiijk(n1,n2,n3)*Q1avg(n2)*Q1avg(n3)/2d0
+       
+                      GTmtrx(:,:,n1)=GTmtrx(:,:,n1)+&
+                                  &coef1*Q1(:,:,n1)+&
+                                  &coef2*Q2(:,:,n1)
+                   end if
+ 
+                else if (nm1>nm2 .AND. nm1<nm3) then
+                   n1=nm2
+                   n2=nm1
+                   n3=nm3
+ 
+                   coef1=0d0 
+                   coef2=0d0
+    
+                   if (ANY(partsubdf==nm1) .AND. &
+                     & ANY(partsubdf==nm2) .AND. &
+                     & ANY(partsubdf==nm3)) then
+                      coef1=tijk(n1,n2,n3)*sQ1avg(n1)*sQ1avg(n3)+&
+                           &uiijk(n1,n2,n3)*sQ2avg(n1)*sQ1avg(n3)/2d0+&
+                           &uijkk(n1,n2,n3)*sQ1avg(n1)*sQ2avg(n3)/2d0
+       
+                      coef2=uijjk(n1,n2,n3)*sQ1avg(n1)*sQ1avg(n3)/2d0
+       
+                      GTmtrx(:,:,n2)=GTmtrx(:,:,n2)+&
+                                  &coef1*sQ1(:,:,n2)+&
+                                  &coef2*sQ2(:,:,n2)
+                   else
+                      coef1=tijk(n1,n2,n3)*Q1avg(n1)*Q1avg(n3)+&
+                           &uiijk(n1,n2,n3)*Q2avg(n1)*Q1avg(n3)/2d0+&
+                           &uijkk(n1,n2,n3)*Q1avg(n1)*Q2avg(n3)/2d0
+       
+                      coef2=uijjk(n1,n2,n3)*Q1avg(n1)*Q1avg(n3)/2d0
+       
+                      GTmtrx(:,:,n2)=GTmtrx(:,:,n2)+&
+                                  &coef1*Q1(:,:,n2)+&
+                                  &coef2*Q2(:,:,n2)
+                   end if
+                else if (nm1>nm3) then
+                   n1=nm2
+                   n2=nm3
+                   n3=nm1
+ 
+                   coef1=0d0 
+                   coef2=0d0
+    
+                   if (ANY(partsubdf==nm1) .AND. &
+                     & ANY(partsubdf==nm2) .AND. &
+                     & ANY(partsubdf==nm3)) then
+                      coef1=tijk(n1,n2,n3)*sQ1avg(n1)*sQ1avg(n2)+&
+                           &uiijk(n1,n2,n3)*sQ2avg(n1)*sQ1avg(n2)/2d0+&
+                           &uijjk(n1,n2,n3)*sQ1avg(n1)*sQ2avg(n2)/2d0
+       
+                      coef2=uijkk(n1,n2,n3)*sQ1avg(n1)*sQ1avg(n2)/2d0
+       
+                      GTmtrx(:,:,n3)=GTmtrx(:,:,n3)+&
+                                  &coef1*sQ1(:,:,n3)+&
+                                  &coef2*sQ2(:,:,n3)
+                   else 
+                      coef1=tijk(n1,n2,n3)*Q1avg(n1)*Q1avg(n2)+&
+                           &uiijk(n1,n2,n3)*Q2avg(n1)*Q1avg(n2)/2d0+&
+                           &uijjk(n1,n2,n3)*Q1avg(n1)*Q2avg(n2)/2d0
+       
+                      coef2=uijkk(n1,n2,n3)*Q1avg(n1)*Q1avg(n2)/2d0
+       
+                      GTmtrx(:,:,n3)=GTmtrx(:,:,n3)+&
+                                  &coef1*Q1(:,:,n3)+&
+                                  &coef2*Q2(:,:,n3)
+                   end if
+                end if
+
+             end do
+          end do
+       end do 
+ 
+       Gmtrx=GDmtrx+GTmtrx
+                   
+       end subroutine
+
+
        subroutine ssvscfcorr(ref,Scho,Po,Q1,Q2,Q3,tiij,tjji,uiiij,ujjji,uiijj,&
                    & tijk,uiijk,uijjk,uijkk,nvdf,ngaus,corr,corrD,corrT)
  !     ------------------------------------------------------------------------ 
@@ -4093,6 +5534,202 @@
        corr = corrD + 2d0*corrT
        end subroutine
  
+       subroutine ssvscfcorrPS(ref,qva_nml,Scho,Po,Q1,Q2,Q3,sQ1,sQ2,sQ3,&
+                   & tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                   & nvdf,ngaus,corr,corrD,corrT)
+ !     ------------------------------------------------------------------------ 
+ !     COMPUTES VSCF ENERGY CORRECTION
+ !     CORR = <PSI|VcD|PSI> + 2 <PSI|VcT|PSI>
+ !     WHERE VcD AND VcT ARE THE DOUBLES AND TRIPLES COUPLING POTENTIAL,
+ !     RESPECTIVELY.
+ !     ------------------------------------------------------------------------ 
+       implicit none
+ 
+       type(qva_nml_type), intent(in) :: qva_nml
+       integer,intent(in)     :: ref(4)
+       integer,intent(in)     :: nvdf
+       integer,intent(in)     :: ngaus
+       real*8,intent(in)      :: Scho(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8,intent(in)      :: Po(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8,intent(in)      :: Q1(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8,intent(in)      :: Q2(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8,intent(in)      :: Q3(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8,intent(in)      :: sQ1(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8,intent(in)      :: sQ2(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8,intent(in)      :: sQ3(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8,intent(in)      :: tiij(nvdf,nvdf)     ! Effective potential matrix.
+       real*8,intent(in)      :: tjji(nvdf,nvdf)     ! Effective potential matrix.
+       real*8,intent(in)      :: uiiij(nvdf,nvdf)     ! Effective potential matrix.
+       real*8,intent(in)      :: ujjji(nvdf,nvdf)     ! Effective potential matrix.
+       real*8,intent(in)      :: uiijj(nvdf,nvdf)     ! Effective potential matrix.
+       real*8,intent(in)      :: tijk(nvdf,nvdf,nvdf)     ! Effective potential matrix.
+       real*8,intent(in)      :: uiijk(nvdf,nvdf,nvdf)     ! Effective potential matrix.
+       real*8,intent(in)      :: uijjk(nvdf,nvdf,nvdf)     ! Effective potential matrix.
+       real*8,intent(in)      :: uijkk(nvdf,nvdf,nvdf)     ! Effective potential matrix.
+       real*8,intent(out)     :: corr
+       real*8,intent(out)     :: corrD
+       real*8,intent(out)     :: corrT
+       
+       integer     :: nm,ierr
+       integer     :: nm1,nm2,qn1,qn2
+       integer     :: a,b,c
+       integer     :: INFO                   ! Error code for dsygst subroutine.
+       real*8      :: Qtmp(ngaus,ngaus)
+       real*8      :: tScho(ngaus,ngaus)
+       real*8      :: Ptmp(ngaus)
+       real*8      :: tmp(ngaus)
+       real*8      :: Qm1(nvdf)
+       real*8      :: Qm2(nvdf)
+       real*8      :: Qm3(nvdf)
+       real*8      :: sQm1(nvdf)
+       real*8      :: sQm2(nvdf)
+       real*8      :: sQm3(nvdf)
+ 
+       real*8,external :: ddot
+
+       integer             :: nmorse, nsinh, npartsub
+       integer,allocatable :: morsemods(:), sinhmods(:), partsubdf(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac,partsubdf
+
+ !     DEBUG
+       integer     :: i,j
+ 
+       nm1=ref(1)
+       qn1=ref(2)
+       nm2=ref(3)
+       qn2=ref(4)
+ 
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+       npartsub = qva_nml%npartsub
+
+       Qm1=0d0
+       Qm2=0d0
+       Qm3=0d0
+       sQm1=0d0
+       sQm2=0d0
+       sQm3=0d0
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf),partsubdf(npartsub))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST WHILE BUILDING OPERATORS')
+       end if
+
+       corr=0.0D0
+       do nm=1,nvdf
+          tScho(:,:) = Scho(:,:,nm)
+          if (nm == nm1) then
+             Ptmp=Po(:,qn1+1,nm)
+          else if (nm == nm2) then
+             Ptmp=Po(:,qn2+1,nm)
+          else
+             Ptmp=Po(:,1,nm)
+          end if
+ 
+          tmp=0.0d0
+          Qtmp(:,:) = 0d0
+          Qtmp(:,:) = Q1(:,:,nm)
+          call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix trasnformation')
+          call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Ptmp,1,0.0D0,tmp,1)
+          Qm1(nm) = ddot(ngaus,Ptmp,1,tmp,1)
+ 
+          tmp=0.0d0
+          Qtmp(:,:) = 0d0
+          Qtmp(:,:) = Q2(:,:,nm)
+          call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix trasnformation')
+          call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Ptmp,1,0.0D0,tmp,1)
+          Qm2(nm) = ddot(ngaus,Ptmp,1,tmp,1)
+ 
+          tmp=0.0d0
+          Qtmp(:,:) = 0d0
+          Qtmp(:,:) = Q3(:,:,nm)
+          call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix trasnformation')
+          call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Ptmp,1,0.0D0,tmp,1)
+          Qm3(nm) = ddot(ngaus,Ptmp,1,tmp,1)
+
+          if (ANY(partsubdf==nm)) then
+             tmp=0.0d0
+             Qtmp(:,:) = 0d0
+             Qtmp(:,:) = sQ1(:,:,nm)
+             call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+             if (INFO /= 0) STOP('Error during Matrix trasnformation')
+             call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Ptmp,1,0.0D0,tmp,1)
+             sQm1(nm) = ddot(ngaus,Ptmp,1,tmp,1)
+    
+             tmp=0.0d0
+             Qtmp(:,:) = 0d0
+             Qtmp(:,:) = sQ2(:,:,nm)
+             call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+             if (INFO /= 0) STOP('Error during Matrix trasnformation')
+             call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Ptmp,1,0.0D0,tmp,1)
+             sQm2(nm) = ddot(ngaus,Ptmp,1,tmp,1)
+    
+             tmp=0.0d0
+             Qtmp(:,:) = 0d0
+             Qtmp(:,:) = sQ3(:,:,nm)
+             call dsygst(1,'U',ngaus,Qtmp,ngaus,tScho,ngaus,INFO)
+             if (INFO /= 0) STOP('Error during Matrix trasnformation')
+             call dsymv('U',ngaus,1.0D0,Qtmp,ngaus,Ptmp,1,0.0D0,tmp,1)
+             sQm3(nm) = ddot(ngaus,Ptmp,1,tmp,1)
+          end if
+
+       end do
+ 
+ !     2-MODE COUPLING POTENTIAL
+       corrD=0.0d0
+       do a=1,nvdf-1
+          do b=a+1,nvdf
+             if (ANY(partsubdf==a) .AND. ANY(partsubdf==b)) then
+                corrD=corrD+&
+                & tiij(a,b)*sQm2(a)*sQm1(b)/2.0d0+&
+                & tjji(a,b)*sQm1(a)*sQm2(b)/2.0d0+&
+                & uiiij(a,b)*sQm3(a)*sQm1(b)/6.0d0+&
+                & ujjji(a,b)*sQm1(a)*sQm3(b)/6.0d0+&
+                & uiijj(a,b)*sQm2(a)*sQm2(b)/4.0d0  
+             else
+                corrD=corrD+&
+                & tiij(a,b)*Qm2(a)*Qm1(b)/2.0d0+&
+                & tjji(a,b)*Qm1(a)*Qm2(b)/2.0d0+&
+                & uiiij(a,b)*Qm3(a)*Qm1(b)/6.0d0+&
+                & ujjji(a,b)*Qm1(a)*Qm3(b)/6.0d0+&
+                & uiijj(a,b)*Qm2(a)*Qm2(b)/4.0d0  
+             end if
+          end do
+       end do
+ 
+ !     3-MODE COUPLING POTENTIAL
+       corrT=0d0
+       do a=1,nvdf-2
+          do b=a+1,nvdf-1
+             do c=b+1,nvdf
+                if (ANY(partsubdf==a) .AND. &
+                  & ANY(partsubdf==b) .AND. &
+                  & ANY(partsubdf==c) ) then
+                   corrT=corrT+&
+                    & tijk(a,b,c)*sQm1(a)*sQm1(b)*sQm1(c)+&
+                    & uiijk(a,b,c)*sQm2(a)*sQm1(b)*sQm1(c)/2d0+&
+                    & uijjk(a,b,c)*sQm1(a)*sQm2(b)*sQm1(c)/2d0+&
+                    & uijkk(a,b,c)*sQm1(a)*sQm1(b)*sQm2(c)/2d0
+                else
+                   corrT=corrT+&
+                    & tijk(a,b,c)*Qm1(a)*Qm1(b)*Qm1(c)+&
+                    & uiijk(a,b,c)*Qm2(a)*Qm1(b)*Qm1(c)/2d0+&
+                    & uijjk(a,b,c)*Qm1(a)*Qm2(b)*Qm1(c)/2d0+&
+                    & uijkk(a,b,c)*Qm1(a)*Qm1(b)*Qm2(c)/2d0
+                end if
+             end do
+          end do
+       end do
+ 
+       corr = corrD + 2d0*corrT
+       end subroutine
  
  
 !       subroutine ssvscfci(qumvia_nmc,qumvia_qff,nrst,ndf,nvdf,ngaus,nmcoup,nqmatoms,nclatoms,&
@@ -4446,6 +6083,195 @@
        end do
        end subroutine
  
+       subroutine build_CIopPS(qva_nml,Po,Q1,Q2,Q3,sQ1,sQ2,sQ3,Hcore,GDmtrx,GTmtrx,&
+                     &Scho,ngaus,nvdf,nmods,Qm1,Qm2,Qm3,sQm1,sQm2,sQm3,Hmc,GDm,GTm)
+ !     -----------------------------------------------------------------
+ !     CHANGE OF BASIS FOR Q AND CORE HAMILTONIAN OPERATORS TO VSCF 
+ !     MODALS BASIS SET.
+ !
+ !     SPECIAL VERSION FOR PARTIAL COORDINATE SUBSTITUTION SCHEME 
+ !
+ !     THIS SUBROUTINE COMPUTES THE MATRIX PRODUCT P^T*Qa^n*P
+ !     THE RESULTING MATRIX ELEMENTS ARE <modal_i|Qa^n|modal_j>
+ !     WHERE I AND J INDICATE DIFFERENT (VIRTUAL) MODALS OF THE SAME
+ !     NORMAL MODE "a". THE SAME FOR THE CORE HAMILTONIAN MATRIX.
+ !     -----------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type), intent(in) :: qva_nml
+       integer,intent(in)  :: ngaus
+       integer,intent(in)  :: nvdf
+       integer,intent(in)  :: nmods ! Dimension of CI operator matrices.
+       real*8,intent(in)   :: Po(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: Hcore(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: Q1(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: Q2(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: Q3(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: sQ1(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: sQ2(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: sQ3(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: GDmtrx(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: GTmtrx(ngaus,ngaus,nvdf)
+       real*8,intent(in)   :: Scho(ngaus,ngaus,nvdf)
+ 
+       real*8,intent(out)  :: Qm1(nmods,nmods,nvdf)
+       real*8,intent(out)  :: Qm2(nmods,nmods,nvdf)
+       real*8,intent(out)  :: Qm3(nmods,nmods,nvdf)
+       real*8,intent(out)  :: sQm1(nmods,nmods,nvdf)
+       real*8,intent(out)  :: sQm2(nmods,nmods,nvdf)
+       real*8,intent(out)  :: sQm3(nmods,nmods,nvdf)
+       real*8,intent(out)  :: Hmc(nmods,nmods,nvdf)
+       real*8,intent(out)  :: GDm(nmods,nmods,nvdf)
+       real*8,intent(out)  :: GTm(nmods,nmods,nvdf)
+  
+       integer      :: nm,ierr
+       integer      :: n1,n2
+       integer      :: INFO
+       real*8       :: tmp(ngaus)
+       real*8       :: Ptmp1(ngaus)
+       real*8       :: Ptmp2(ngaus)
+       real*8       :: tScho(ngaus,ngaus)
+       real*8       :: Q1tmp(ngaus,ngaus)
+       real*8       :: Q2tmp(ngaus,ngaus)
+       real*8       :: Q3tmp(ngaus,ngaus)
+       real*8       :: sQ1tmp(ngaus,ngaus)
+       real*8       :: sQ2tmp(ngaus,ngaus)
+       real*8       :: sQ3tmp(ngaus,ngaus)
+       real*8       :: GDtmp(ngaus,ngaus)
+       real*8       :: GTtmp(ngaus,ngaus)
+ 
+       real*8,external :: ddot
+       integer             :: nmorse, nsinh, npartsub
+       integer,allocatable :: morsemods(:), sinhmods(:), partsubdf(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac,partsubdf
+
+ !     DEBUG
+       integer      :: i,j
+ !     -----------------------------------------------------------------
+
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+       npartsub = qva_nml%npartsub
+
+!      READING LIST OF NORMAL MODES INTO WHICH TO APPLY MORSE AND/OR SINH COORDS.
+!      THE LIST IS READ FROM A NAMELIST CALLED 'AUXCOORDS' INSIDE THE QUMVIA 
+!      COMMANDS INPUT FILE ALONGSIDE THE &QVA AND (POSSIBLY) &LIO NAMELISTS.
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf),partsubdf(npartsub))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST')
+       end if
+
+       Qm1=0d0
+       Qm2=0d0
+       Qm3=0d0
+       sQm1=0d0
+       sQm2=0d0
+       sQm3=0d0
+       GDm=0d0
+       GTm=0d0
+       Hmc=0d0
+
+       do nm=1,nvdf
+ 
+          Q1tmp(:,:)=0d0
+          Q2tmp(:,:)=0d0
+          Q3tmp(:,:)=0d0
+          sQ1tmp(:,:)=0d0
+          sQ2tmp(:,:)=0d0
+          sQ3tmp(:,:)=0d0
+          GDtmp(:,:)=0d0
+          GTtmp(:,:)=0d0
+          tScho(:,:)=0d0
+ 
+          tScho=Scho(:,:,nm)
+          Q1tmp(:,:)=Q1(:,:,nm)
+          Q2tmp(:,:)=Q2(:,:,nm)
+          Q3tmp(:,:)=Q3(:,:,nm)
+          GDtmp(:,:)=GDmtrx(:,:,nm)
+          GTtmp(:,:)=GTmtrx(:,:,nm)
+ 
+          call dsygst(1,'U',ngaus,Q1tmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix transformation')
+          call dsygst(1,'U',ngaus,Q2tmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix transformation')
+          call dsygst(1,'U',ngaus,Q3tmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix transformation')
+          call dsygst(1,'U',ngaus,GDtmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix transformation')
+          call dsygst(1,'U',ngaus,GTtmp,ngaus,tScho,ngaus,INFO)
+          if (INFO /= 0) STOP('Error during Matrix transformation')
+ 
+          if (ANY(partsubdf==nm)) then
+             sQ1tmp(:,:)=sQ1(:,:,nm)
+             sQ2tmp(:,:)=sQ2(:,:,nm)
+             sQ3tmp(:,:)=sQ3(:,:,nm)
+
+             call dsygst(1,'U',ngaus,sQ1tmp,ngaus,tScho,ngaus,INFO)
+             if (INFO /= 0) STOP('Error during Matrix transformation')
+             call dsygst(1,'U',ngaus,sQ2tmp,ngaus,tScho,ngaus,INFO)
+             if (INFO /= 0) STOP('Error during Matrix transformation')
+             call dsygst(1,'U',ngaus,sQ3tmp,ngaus,tScho,ngaus,INFO)
+             if (INFO /= 0) STOP('Error during Matrix transformation')
+          end if
+
+          do n1=1,nmods
+             do n2=n1,nmods
+                Ptmp1=Po(:,n1,nm)
+                Ptmp2=Po(:,n2,nm)
+       
+                tmp=0.0d0
+                call dsymv('U',ngaus,1.0D0,Q1tmp,ngaus,Ptmp1,1,0.0D0,tmp,1)
+                Qm1(n1,n2,nm) = ddot(ngaus,Ptmp2,1,tmp,1)
+                if (n1 /= n2) Qm1(n2,n1,nm) = Qm1(n1,n2,nm)
+       
+                tmp=0.0d0
+                call dsymv('U',ngaus,1.0D0,Q2tmp,ngaus,Ptmp1,1,0.0D0,tmp,1)
+                Qm2(n1,n2,nm) = ddot(ngaus,Ptmp2,1,tmp,1)
+                if (n1 /= n2) Qm2(n2,n1,nm) = Qm2(n1,n2,nm)
+       
+                tmp=0.0d0
+                call dsymv('U',ngaus,1.0D0,Q3tmp,ngaus,Ptmp1,1,0.0D0,tmp,1)
+                Qm3(n1,n2,nm) = ddot(ngaus,Ptmp2,1,tmp,1)
+                if (n1 /= n2) Qm3(n2,n1,nm) = Qm3(n1,n2,nm)
+       
+                tmp=0.0d0
+                call dsymv('U',ngaus,1.0D0,GDtmp,ngaus,Ptmp1,1,0.0D0,tmp,1)
+                GDm(n1,n2,nm) = ddot(ngaus,Ptmp2,1,tmp,1)
+                if (n1 /= n2) GDm(n2,n1,nm) = GDm(n1,n2,nm)
+       
+                tmp=0.0d0
+                call dsymv('U',ngaus,1.0D0,GTtmp,ngaus,Ptmp1,1,0.0D0,tmp,1)
+                GTm(n1,n2,nm) = ddot(ngaus,Ptmp2,1,tmp,1)
+                if (n1 /= n2) GTm(n2,n1,nm) = GTm(n1,n2,nm)
+
+                if (ANY(partsubdf==nm)) then
+                   tmp=0.0d0
+                   call dsymv('U',ngaus,1.0D0,sQ1tmp,ngaus,Ptmp1,1,0.0D0,tmp,1)
+                   sQm1(n1,n2,nm) = ddot(ngaus,Ptmp2,1,tmp,1)
+                   if (n1 /= n2) sQm1(n2,n1,nm) = sQm1(n1,n2,nm)
+          
+                   tmp=0.0d0
+                   call dsymv('U',ngaus,1.0D0,sQ2tmp,ngaus,Ptmp1,1,0.0D0,tmp,1)
+                   sQm2(n1,n2,nm) = ddot(ngaus,Ptmp2,1,tmp,1)
+                   if (n1 /= n2) sQm2(n2,n1,nm) = sQm2(n1,n2,nm)
+          
+                   tmp=0.0d0
+                   call dsymv('U',ngaus,1.0D0,sQ3tmp,ngaus,Ptmp1,1,0.0D0,tmp,1)
+                   sQm3(n1,n2,nm) = ddot(ngaus,Ptmp2,1,tmp,1)
+                   if (n1 /= n2) sQm3(n2,n1,nm) = sQm3(n1,n2,nm)
+                end if
+
+             end do
+          end do
+       end do
+       end subroutine
+
+
        subroutine genConf2b(qmaxx1,qmaxx2,nvdf,nconf,configs)
  !     -----------------------------------------------------------------
  !     THIS SUBROUTINE GENERATES ALL CI SINGLE AND DOUBLE CONFIGURATIONS
@@ -4946,6 +6772,432 @@
            & uiijk(i,j,k)*Qm2(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm1(nk1,nk2,k)/2d0 + &
            & uijjk(i,j,k)*Qm1(ni1,ni2,i)*Qm2(nj1,nj2,j)*Qm1(nk1,nk2,k)/2d0 + &
            & uijkk(i,j,k)*Qm1(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm2(nk1,nk2,k)/2d0
+       ELSE
+          Hci(cnf) = 0d0
+       END IF
+ 
+       end subroutine
+ 
+       subroutine calcHterm1PS(qva_nml,qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,sQm1,sQm2,sQm3,&
+                    &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                    &nvdf,nmods,nconf,Hci,cnf,psi1,psi2,dif)
+ !     -----------------------------------------------------------------
+ !     Given 2 configurations |K> and |L>, this subroutine computes
+ !     the corresponding Hamiltonian matrix element suposing that
+ !     |K > and |L> differ in ONLY ONE MODAL.
+ !                          < K | H | L >
+ !     -----------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type),intent(in) :: qva_nml
+       integer,intent(in)   :: qumvia_nmc
+       integer,intent(in)   :: nvdf,nmods,nconf,cnf
+       integer,intent(in)   :: psi1(nvdf)
+       integer,intent(in)   :: psi2(nvdf)
+       integer,intent(in)   :: dif(3)
+       real*8,intent(in)    :: Qm1(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm2(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm3(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm1(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm2(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm3(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Hmc(nmods,nmods,nvdf)
+       real*8,intent(in)    :: GDm(nmods,nmods,nvdf)
+       real*8,intent(in)    :: GTm(nmods,nmods,nvdf)
+       real*8,intent(in)    :: tiij(nvdf,nvdf)
+       real*8,intent(in)    :: tjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiiij(nvdf,nvdf)
+       real*8,intent(in)    :: ujjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiijj(nvdf,nvdf)
+       real*8,intent(in)    :: tijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uiijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijjk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijkk(nvdf,nvdf,nvdf)
+       real*8,intent(inout) :: Hci(nconf+nconf*(nconf-1)/2)
+ 
+       integer :: i,j,k
+       integer :: a,b
+       integer :: n1,n2
+       integer :: ni1,ni2
+       integer :: nj1,nj2
+       integer :: nk1,nk2
+       integer :: ierr
+       real*8 :: Vc2
+       real*8 :: Vc3
+       real*8 :: veff      ! Auxiliary variable for Hci calculation.
+
+       integer             :: nmorse, nsinh, npartsub
+       integer,allocatable :: morsemods(:), sinhmods(:), partsubdf(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac,partsubdf
+ !     -----------------------------------------------------------------
+ 
+!      Read partial coordinate substitution parameters from input file.
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+       npartsub = qva_nml%npartsub
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf),partsubdf(npartsub))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST')
+       end if
+
+ 
+ !     Computing VSCF effective potential.
+       veff=0d0
+       n1=psi1(dif(1))+1
+       n2=psi2(dif(1))+1
+       veff=GDm(n1,n2,dif(1))+GTm(n1,n2,dif(1))
+ 
+ !     Computing Coupling Potential
+       Vc2 = 0.0d0
+       do a=1,nvdf
+          if (a == dif(1)) CYCLE
+ 
+          if (a<dif(1)) then
+             i=a
+             j=dif(1)
+             ni1=psi1(a)+1
+             ni2=ni1
+             nj1=psi1(dif(1))+1
+             nj2=psi2(dif(1))+1
+          else
+             i=dif(1)
+             j=a
+             ni1=psi1(dif(1))+1
+             ni2=psi2(dif(1))+1
+             nj1=psi1(a)+1
+             nj2=nj1
+          end if 
+          if (ANY(partsubdf==i) .AND. ANY(partsubdf==j)) then
+             Vc2 = Vc2 + &
+                  & tiij(i,j)*sQm2(ni1,ni2,i)*sQm1(nj1,nj2,j)/2.0d0 + &
+                  & tjji(i,j)*sQm1(ni1,ni2,i)*sQm2(nj1,nj2,j)/2.0d0 + &
+                  & uiiij(i,j)*sQm3(ni1,ni2,i)*sQm1(nj1,nj2,j)/6.0d0+ &
+                  & ujjji(i,j)*sQm1(ni1,ni2,i)*sQm3(nj1,nj2,j)/6.0d0+ &
+                  & uiijj(i,j)*sQm2(ni1,ni2,i)*sQm2(nj1,nj2,j)/4.0d0
+          else
+             Vc2 = Vc2 + &
+                  & tiij(i,j)*Qm2(ni1,ni2,i)*Qm1(nj1,nj2,j)/2.0d0 + &
+                  & tjji(i,j)*Qm1(ni1,ni2,i)*Qm2(nj1,nj2,j)/2.0d0 + &
+                  & uiiij(i,j)*Qm3(ni1,ni2,i)*Qm1(nj1,nj2,j)/6.0d0+ &
+                  & ujjji(i,j)*Qm1(ni1,ni2,i)*Qm3(nj1,nj2,j)/6.0d0+ &
+                  & uiijj(i,j)*Qm2(ni1,ni2,i)*Qm2(nj1,nj2,j)/4.0d0
+          end if
+       end do
+ 
+       Vc3 = 0d0
+       IF (qumvia_nmc == 3) THEN
+       do a=1,nvdf-1
+          do b=a+1,nvdf
+ 
+             if (a == dif(1)) CYCLE
+             if (b == dif(1)) CYCLE
+ 
+             if (dif(1) < a) then
+                i=dif(1)
+                j=a
+                k=b
+ 
+                ni1=psi1(dif(1))+1
+                ni2=psi2(dif(1))+1
+                nj1=psi1(a)+1
+                nj2=psi2(a)+1
+                nk1=psi1(b)+1
+                nk2=psi2(b)+1
+             else if (a<dif(1) .AND. dif(1)<b) then
+                i=a
+                j=dif(1)
+                k=b
+ 
+                ni1=psi1(a)+1
+                ni2=psi2(a)+1
+                nj1=psi1(dif(1))+1
+                nj2=psi2(dif(1))+1
+                nk1=psi1(b)+1
+                nk2=psi2(b)+1
+             else if (b<dif(1)) then
+                i=a
+                j=b
+                k=dif(1)
+ 
+                ni1=psi1(a)+1
+                ni2=psi2(a)+1
+                nj1=psi1(b)+1
+                nj2=psi2(b)+1
+                nk1=psi1(dif(1))+1
+                nk2=psi2(dif(1))+1
+             end if
+ 
+             if (ANY(partsubdf==i) .AND. &
+               & ANY(partsubdf==j) .AND. &
+               & ANY(partsubdf==k)) then
+                Vc3=Vc3+&
+                 & tijk(i,j,k)*sQm1(ni1,ni2,i)*sQm1(nj1,nj2,j)*sQm1(nk1,nk2,k)+ &
+                 & uiijk(i,j,k)*sQm2(ni1,ni2,i)*sQm1(nj1,nj2,j)*sQm1(nk1,nk2,k)/2d0+ &
+                 & uijjk(i,j,k)*sQm1(ni1,ni2,i)*sQm2(nj1,nj2,j)*sQm1(nk1,nk2,k)/2d0+ &
+                 & uijkk(i,j,k)*sQm1(ni1,ni2,i)*sQm1(nj1,nj2,j)*sQm2(nk1,nk2,k)/2d0
+             else
+                Vc3=Vc3+&
+                 & tijk(i,j,k)*Qm1(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm1(nk1,nk2,k)+ &
+                 & uiijk(i,j,k)*Qm2(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm1(nk1,nk2,k)/2d0+ &
+                 & uijjk(i,j,k)*Qm1(ni1,ni2,i)*Qm2(nj1,nj2,j)*Qm1(nk1,nk2,k)/2d0+ &
+                 & uijkk(i,j,k)*Qm1(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm2(nk1,nk2,k)/2d0
+             end if
+          end do
+       end do 
+       END IF
+ 
+ 
+ !     COMPUTING HAMILTONIAN MATRIX ELEMENT
+ !     DANGER DANGER!   
+       Hci(cnf)=Vc2 + Vc3 - veff
+ !      Hci(cnf)=Hmc(n1,n2,dif(1)) + Vc2 + Vc3 - veff
+ 
+       end subroutine
+ 
+       subroutine calcHterm2PS(qva_nml,qumvia_nmc,Qm1,Qm2,Qm3,sQm1,sQm2,sQm3,&
+                   &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                   &nvdf,nmods,nconf,Hci,cnf,psi1,psi2,dif)
+ !     -----------------------------------------------------------------
+ !     Given 2 configurations |K> and |L>, this subroutine computes
+ !     the corresponding Hamiltonian matrix element suposing that
+ !     |K > and |L> differ in ONLY TWO MODALS.
+ !                          < K | H | L >
+ !     -----------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type),intent(in) :: qva_nml
+       integer,intent(in)   :: qumvia_nmc
+       integer,intent(in)   :: nvdf
+       integer,intent(in)   :: nmods
+       integer,intent(in)   :: nconf
+       integer,intent(in)   :: cnf
+       integer,intent(in)   :: psi1(nvdf)
+       integer,intent(in)   :: psi2(nvdf)
+       integer,intent(in)   :: dif(3)
+       real*8,intent(in)    :: Qm1(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm2(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm3(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm1(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm2(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm3(nmods,nmods,nvdf)
+       real*8,intent(in)    :: tiij(nvdf,nvdf)
+       real*8,intent(in)    :: tjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiiij(nvdf,nvdf)
+       real*8,intent(in)    :: ujjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiijj(nvdf,nvdf)
+       real*8,intent(in)    :: tijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uiijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijjk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijkk(nvdf,nvdf,nvdf)
+       real*8,intent(inout) :: Hci(nconf+nconf*(nconf-1)/2)
+ 
+       integer :: i,j,k
+       integer :: a,b,c
+       integer :: ni1,ni2,nj1,nj2,nk1,nk2
+       integer :: ierr
+       real*8  :: Vc2,Vc3
+
+       integer             :: nmorse, nsinh, npartsub
+       integer,allocatable :: morsemods(:), sinhmods(:), partsubdf(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac,partsubdf
+ !     -----------------------------------------------------------------
+ 
+ 
+!      Read partial coordinate substitution parameters from input file.
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+       npartsub = qva_nml%npartsub
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf),partsubdf(npartsub))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST')
+       end if
+
+ 
+       if (dif(1) < dif(2)) then
+          i=dif(1)
+          j=dif(2)
+       else
+          i=dif(2)
+          j=dif(1)
+       end if 
+ 
+       ni1=psi1(i)+1
+       ni2=psi2(i)+1
+       nj1=psi1(j)+1
+       nj2=psi2(j)+1
+           
+       Vc2 = 0d0
+
+       if (ANY(partsubdf==i) .AND. ANY(partsubdf==j)) then
+          Vc2 =  &
+             & tiij(i,j)*sQm2(ni1,ni2,i)*sQm1(nj1,nj2,j)/2.0d0+&
+             & tjji(i,j)*sQm1(ni1,ni2,i)*sQm2(nj1,nj2,j)/2.0d0+&
+             & uiiij(i,j)*sQm3(ni1,ni2,i)*sQm1(nj1,nj2,j)/6.0d0+&
+             & ujjji(i,j)*sQm1(ni1,ni2,i)*sQm3(nj1,nj2,j)/6.0d0+&
+             & uiijj(i,j)*sQm2(ni1,ni2,i)*sQm2(nj1,nj2,j)/4.0d0
+       else
+          Vc2 =  &
+             & tiij(i,j)*Qm2(ni1,ni2,i)*Qm1(nj1,nj2,j)/2.0d0+&
+             & tjji(i,j)*Qm1(ni1,ni2,i)*Qm2(nj1,nj2,j)/2.0d0+&
+             & uiiij(i,j)*Qm3(ni1,ni2,i)*Qm1(nj1,nj2,j)/6.0d0+&
+             & ujjji(i,j)*Qm1(ni1,ni2,i)*Qm3(nj1,nj2,j)/6.0d0+&
+             & uiijj(i,j)*Qm2(ni1,ni2,i)*Qm2(nj1,nj2,j)/4.0d0
+       end if
+ 
+       Vc3 = 0d0
+       IF (qumvia_nmc == 3) THEN
+       do a=1,nvdf
+ 
+          if (a == dif(1)) CYCLE
+          if (a == dif(2)) CYCLE
+ 
+          if (a < dif(1) .AND. dif(1) < dif(2)) then
+             i=a
+             j=dif(1)
+             k=dif(2)
+          else if (dif(1) < a .AND. a < dif(2)) then
+             i=dif(1)
+             j=a
+             k=dif(2)
+          else if ( dif(2) < a ) then
+             i=dif(1)
+             j=dif(2)
+             k=a
+          end if
+ 
+          ni1=psi1(i)+1
+          ni2=psi2(i)+1
+          nj1=psi1(j)+1
+          nj2=psi2(j)+1
+          nk1=psi1(k)+1
+          nk2=psi2(k)+1
+ 
+          if (ANY(partsubdf==i) .AND. &
+            & ANY(partsubdf==j) .AND. &
+            & ANY(partsubdf==k)) then
+             Vc3=Vc3+ &
+              & tijk(i,j,k)*sQm1(ni1,ni2,i)*sQm1(nj1,nj2,j)*sQm1(nk1,nk2,k) + &
+              & uiijk(i,j,k)*sQm2(ni1,ni2,i)*sQm1(nj1,nj2,j)*sQm1(nk1,nk2,k)/2d0 + &
+              & uijjk(i,j,k)*sQm1(ni1,ni2,i)*sQm2(nj1,nj2,j)*sQm1(nk1,nk2,k)/2d0 + &
+              & uijkk(i,j,k)*sQm1(ni1,ni2,i)*sQm1(nj1,nj2,j)*sQm2(nk1,nk2,k)/2d0
+          else
+             Vc3=Vc3+ &
+              & tijk(i,j,k)*Qm1(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm1(nk1,nk2,k) + &
+              & uiijk(i,j,k)*Qm2(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm1(nk1,nk2,k)/2d0 + &
+              & uijjk(i,j,k)*Qm1(ni1,ni2,i)*Qm2(nj1,nj2,j)*Qm1(nk1,nk2,k)/2d0 + &
+              & uijkk(i,j,k)*Qm1(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm2(nk1,nk2,k)/2d0
+          end if 
+       end do
+       END IF 
+    
+ !     VCI MATRIX ELEMENT
+       Hci(cnf) = Vc2 + Vc3
+ 
+       end subroutine
+ 
+       subroutine calcHterm3PS(qva_nml,qumvia_nmc,Qm1,Qm2,Qm3,sQm1,sQm2,sQm3,&
+                   &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                   &nvdf,nmods,nconf,Hci,cnf,psi1,psi2,dif)
+ !     -----------------------------------------------------------------
+ !     Given 2 configurations |K> and |L>, this subroutine computes
+ !     the corresponding Hamiltonian matrix element suposing that
+ !     |K > and |L> differ in ONLY TWO MODALS.
+ !                          < K | H | L >
+ !     -----------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type),intent(in) :: qva_nml
+       integer,intent(in)   :: qumvia_nmc
+       integer,intent(in)   :: nvdf
+       integer,intent(in)   :: nmods
+       integer,intent(in)   :: nconf
+       integer,intent(in)   :: cnf
+       integer,intent(in)   :: psi1(nvdf)
+       integer,intent(in)   :: psi2(nvdf)
+       integer,intent(in)   :: dif(3)
+       real*8,intent(in)    :: Qm1(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm2(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm3(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm1(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm2(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm3(nmods,nmods,nvdf)
+       real*8,intent(in)    :: tiij(nvdf,nvdf)
+       real*8,intent(in)    :: tjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiiij(nvdf,nvdf)
+       real*8,intent(in)    :: ujjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiijj(nvdf,nvdf)
+       real*8,intent(in)    :: tijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uiijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijjk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijkk(nvdf,nvdf,nvdf)
+       real*8,intent(inout) :: Hci(nconf+nconf*(nconf-1)/2)
+ 
+       integer :: i,j,k
+       integer :: ni1,ni2,nj1,nj2,nk1,nk2
+       integer :: ierr
+
+       integer             :: nmorse, nsinh, npartsub
+       integer,allocatable :: morsemods(:), sinhmods(:), partsubdf(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac,partsubdf
+ !     -----------------------------------------------------------------
+ 
+!      Read partial coordinate substitution parameters from input file.
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+       npartsub = qva_nml%npartsub
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf),partsubdf(npartsub))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST')
+       end if
+
+ 
+       IF (qumvia_nmc == 3) THEN
+ !        COMPUTING 3-MODE COUPLING TERMS
+          if (dif(1) > dif(2)) STOP ('dif(1) > dif(2) in calcHterm3')
+          if (dif(2) > dif(3)) STOP ('dif(2) > dif(3) in calcHterm3')
+          if (dif(1) > dif(3)) STOP ('dif(1) > dif(3) in calcHterm3')
+    
+          i=dif(1)
+          j=dif(2)
+          k=dif(3)
+    
+          ni1=psi1(i)+1
+          ni2=psi2(i)+1
+          nj1=psi1(j)+1
+          nj2=psi2(j)+1
+          nk1=psi1(k)+1
+          nk2=psi2(k)+1
+    
+          if (ANY(partsubdf==i) .AND. &
+            & ANY(partsubdf==j) .AND. &
+            & ANY(partsubdf==k)) then
+             Hci(cnf)= &
+              & tijk(i,j,k)*sQm1(ni1,ni2,i)*sQm1(nj1,nj2,j)*sQm1(nk1,nk2,k) + &
+              & uiijk(i,j,k)*sQm2(ni1,ni2,i)*sQm1(nj1,nj2,j)*sQm1(nk1,nk2,k)/2d0 + &
+              & uijjk(i,j,k)*sQm1(ni1,ni2,i)*sQm2(nj1,nj2,j)*sQm1(nk1,nk2,k)/2d0 + &
+              & uijkk(i,j,k)*sQm1(ni1,ni2,i)*sQm1(nj1,nj2,j)*sQm2(nk1,nk2,k)/2d0
+          else
+             Hci(cnf)= &
+              & tijk(i,j,k)*Qm1(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm1(nk1,nk2,k) + &
+              & uiijk(i,j,k)*Qm2(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm1(nk1,nk2,k)/2d0 + &
+              & uijjk(i,j,k)*Qm1(ni1,ni2,i)*Qm2(nj1,nj2,j)*Qm1(nk1,nk2,k)/2d0 + &
+              & uijkk(i,j,k)*Qm1(ni1,ni2,i)*Qm1(nj1,nj2,j)*Qm2(nk1,nk2,k)/2d0
+          end if
        ELSE
           Hci(cnf) = 0d0
        END IF
@@ -7014,6 +9266,309 @@
  
        end subroutine
  
+       subroutine csVCIps(qva_nml,ref,qumvia_nmc,ethresh,resthresh,selcut1,selcut2,&
+                    &Po,Q1,Q2,Q3,sQ1,sQ2,sQ3,Hcore,GDmtrx,GTmtrx,Scho,Emod,&
+                    &hii,tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                    &nconf,ngaus,nvdf,qmaxx1,qmaxx2,qmaxx3,qmaxx4,bdim,Eref)
+ 
+ !     -----------------------------------------------------------------
+ !     SINGLE REFERENCE VIRTUAL CONFIGURATION INTERACTION
+ !     This subroutine is the main program for virtual configuration
+ !     interaction (VCI). 
+ !     First a matrix representation of the hamiltonian in the VSCF 
+ !     virtual wavefunctions (configurations) is built. Then it attempts
+ !     to diagonalize it.
+ !     To save memory, the hamiltonian is stored in packed format for
+ !     symmetric matrices
+ !     -----------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type), intent(in) :: qva_nml
+       integer,intent(in)  :: qumvia_nmc ! Number of coupled modes.
+       integer,intent(in)  :: ref(8) ! Reference configuration.
+       integer,intent(in)  :: ngaus ! Dimension of DGBS
+       integer,intent(in)  :: nconf ! Dimension of CI basis set (VSCF configurations)
+       integer,intent(in)  :: nvdf  ! Number of vib. deg. of freedom.
+       integer,intent(in)  :: qmaxx1 ! Max quantum number allowed for sigles.
+       integer,intent(in)  :: qmaxx2 ! Max quantum number allowed for doubles.
+       integer,intent(in)  :: qmaxx3 ! Max quantum number allowed for triples.
+       integer,intent(in)  :: qmaxx4 ! Max quantum number allowed for quadruples
+       integer,intent(in)  :: bdim  ! Dimension of operator matrices (qmaxx1+1 by default)
+       real*8,intent(in)   :: ethresh    ! Energy threshold for CS (cm-1)
+       real*8,intent(in)   :: resthresh  ! Resonance threshold
+       real*8,intent(in)   :: Emod(ngaus,nvdf) ! VSCF modal energies.
+       real*8,intent(in)   :: Po(ngaus,ngaus,nvdf) ! VSCF coeficients.
+       real*8,intent(in)   :: Hcore(ngaus,ngaus,nvdf) ! Core Hamiltonian in DGB.
+       real*8,intent(in)   :: Scho(ngaus,ngaus,nvdf) ! Core Hamiltonian in DGB.
+       real*8,intent(in)   :: Q1(ngaus,ngaus,nvdf) ! Q^1 operator in DGB
+       real*8,intent(in)   :: Q2(ngaus,ngaus,nvdf) ! Q^2 operator in DGB
+       real*8,intent(in)   :: Q3(ngaus,ngaus,nvdf) ! Q^3 operator in DGB
+       real*8,intent(in)   :: sQ1(ngaus,ngaus,nvdf) ! Q^1 operator in DGB
+       real*8,intent(in)   :: sQ2(ngaus,ngaus,nvdf) ! Q^2 operator in DGB
+       real*8,intent(in)   :: sQ3(ngaus,ngaus,nvdf) ! Q^3 operator in DGB
+       real*8,intent(in)   :: GDmtrx(ngaus,ngaus,nvdf) ! Effective 2mc potential
+       real*8,intent(in)   :: GTmtrx(ngaus,ngaus,nvdf) ! Effective 3mc potential
+       real*8,intent(in)   :: hii(nvdf)
+       real*8,intent(in)   :: tiij(nvdf,nvdf)      !! 2-mode
+       real*8,intent(in)   :: tjji(nvdf,nvdf)      !! Coupling
+       real*8,intent(in)   :: uiiij(nvdf,nvdf)     !! potential 
+       real*8,intent(in)   :: ujjji(nvdf,nvdf)     !! paramters
+       real*8,intent(in)   :: uiijj(nvdf,nvdf)     !!
+       real*8,intent(in)   :: tijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)   :: uiijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)   :: uijjk(nvdf,nvdf,nvdf)
+       real*8,intent(in)   :: uijkk(nvdf,nvdf,nvdf)
+       real*8,intent(in)   :: selcut1
+       real*8,intent(in)   :: selcut2
+       real*8,intent(out)  :: Eref
+ 
+       integer :: doconfsel
+       integer :: csdepth ! Number of CS itterations.
+       integer :: stopcnf ! Number of selected confs in prev round.
+       integer :: i,j
+       integer :: ns
+       integer :: nmods
+       integer :: nsc     ! number of selected confs
+       integer :: ntrsh
+       integer :: nref
+       integer :: ev
+       integer :: cnf
+       integer :: err
+       integer :: ml(1)
+       integer :: conf(8)
+       real*8  :: csifac
+       real*8  :: Qm1(bdim,bdim,nvdf)
+       real*8  :: Qm2(bdim,bdim,nvdf)
+       real*8  :: Qm3(bdim,bdim,nvdf)
+       real*8  :: sQm1(bdim,bdim,nvdf)
+       real*8  :: sQm2(bdim,bdim,nvdf)
+       real*8  :: sQm3(bdim,bdim,nvdf)
+       real*8  :: Hmc(bdim,bdim,nvdf)
+       real*8  :: GDm(bdim,bdim,nvdf)
+       real*8  :: GTm(bdim,bdim,nvdf)
+       real*8  :: tol
+       real*8  :: cut
+       real*8  :: Ediag
+ 
+ !     Alocatable variables.
+       real*8,dimension(:),allocatable   :: Hci
+       real*8,dimension(:),allocatable   :: diag
+       real*8,dimension(:),allocatable   :: sdiag
+       real*8,dimension(:),allocatable   :: ECI
+       real*8,dimension(:),allocatable   :: Evhf
+       real*8,dimension(:),allocatable   :: vec
+       real*8,dimension(:,:),allocatable :: Cci
+ 
+       integer,dimension(:),allocatable    :: sort
+       integer,dimension(:),allocatable    :: gsel
+       integer,dimension(:,:), allocatable :: configs
+       integer,dimension(:,:), allocatable :: sconfigs
+ 
+ !     Workspace for diagonalization. 
+       real*8,  dimension(:), allocatable :: WORK
+       integer, dimension(:), allocatable :: IWORK,IFAIL
+       integer :: INFO
+ 
+       real*8,external  :: dnrm2
+       real*8,external  :: dlamch
+       real*8, parameter :: h2cm = 219474.63d0 ! cm-1/Ha
+ !     -----------------------------------------------------------------
+       csdepth=qva_nml%csdepth
+       csifac=qva_nml%csiterfactor
+       doconfsel=qva_nml%doconfsel
+       nmods=qmaxx1+1 ! Dimension of CI operator matrices.
+ 
+       if (doconfsel == 1) then
+          write(77,*)
+          write(77,'(A)') '--------------'
+          write(77,'(A)') 'STARTING csVCI'
+          write(77,'(A)') '--------------'
+       else 
+          write(77,*)
+          write(77,'(A)') '--------------'
+          write(77,'(A)') 'STARTING VCI'
+          write(77,'(A)') '--------------'
+       end if
+       write(77,*)
+       write(77,'(A,8I3)') 'COMPUTING VCI FOR REFERENCE STATE ',ref
+
+        
+ !     CHANGE OF BASIS FROM GAUSSIAN TO VSCF MODALS FOR Q AND Hcore OPERATORS.
+ !     -----------------------------------------------------------------
+       call build_CIopPS(qva_nml,Po,Q1,Q2,Q3,sQ1,sQ2,sQ3,Hcore,GDmtrx,GTmtrx,&
+                     &Scho,ngaus,nvdf,nmods,Qm1,Qm2,Qm3,sQm1,sQm2,sQm3,Hmc,GDm,GTm)
+       write(77,'(A)') 'FINNISHED VCI OPERATORS   '
+ 
+ 
+       allocate(configs(8,nconf),diag(nconf),stat=err)
+       if (err /= 0) STOP ('ALLOCATION ERROR: Configuration selection')
+ 
+       IF (doconfsel == 1) THEN
+
+ !        CONFIGURATION SELECTION (SHORT CIRCUITED FOR NOW)
+ !        -----------------------------------------------------------------
+          write(77,'(A)') 'INPUT ERROR: CONFIG SELECTION IS NOT IMPLEMENTED IN'
+          write(77,'(A)') 'PARTIAL SUBSTITUTION SCHEME'
+          STOP
+ !        -----------------------------------------------------------------
+!         nsc=1
+!         configs=0
+!         write(77,*)
+!         write(77,'(A)') 'STARTING RECURSIVE CONFIGURATION SELECTION  '
+!         write(77,'(A)') '------------------------------------------------------------'
+!         do i=1,csdepth
+!            if (i==1) cut=selcut1
+!            if (i>1) cut=csifac*cut
+!            write(77,'(A,I2,A,D10.3)') 'CUTOFF FOR ITERATION ',i,' = ',cut
+!            call confsel(qmaxx1,qmaxx2,qmaxx3,qmaxx4,nvdf,nconf,configs,ngaus,&
+!                 & nmods,qumvia_nmc,ref,nsc,cut,diag,ethresh,Emod,&
+!                 & Qm1,Qm2,Qm3,Hmc,GDm,GTm,hii,tiij,tjji,uiiij,ujjji,uiijj,&
+!                 & tijk,uiijk,uijjk,uijkk)
+!         end do
+!         write(77,'(A)') '------------------------------------------------------------'
+!         write(77,'(A,I15)') 'Configs after RECURSIVE CS =',nsc
+!         write(77,*)
+    
+       ELSE
+
+!         NO CONFIGURATION SELECTION
+!         -----------------------------------------------------------------
+          configs=0
+          diag=0d0
+          call genConf3(qmaxx1,qmaxx2,qmaxx3,qmaxx4,hii,ethresh,nvdf,nconf,nsc,configs)
+          write(77,'(A,I15)') 'Configs after energy threshold =',nsc
+          do i=1,nsc
+             conf = configs(:,i)
+             if ( equal(ref,conf) ) nref=i
+             call diagCImePS(conf,qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,&
+                      &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                      &nvdf,ngaus,nmods,nconf,Ediag,sQm1,sQm2,sQm3,qva_nml)
+             diag(i) = Ediag
+          end do
+
+       END IF
+    
+    
+!      REDUCING SIZE OF ARRAYS
+!      -----------------------------------------------------------------
+       allocate(sconfigs(8,nsc),sdiag(nsc),stat=err)
+       if (err /= 0) STOP ('ALLOCATION ERROR: sconfigs')
+   
+       sconfigs = configs(:,1:nsc)
+       sdiag = diag(1:nsc)
+  
+       if (allocated(configs)) deallocate(configs,diag,stat=err)
+       if (err /= 0) STOP ('DEALLOCATION ERROR: configs,diag')
+       allocate(configs(8,nsc),diag(nsc),stat=err)
+       if (err /= 0) STOP ('ALLOCATION ERROR: configs,diag')
+ 
+       configs = sconfigs
+       diag = sdiag
+ 
+       if (allocated(sconfigs)) deallocate(sconfigs,sdiag,stat=err)
+       if (err/=0) STOP('ALLOCATION ERROR: deallocating sconfigs/sdiag')
+       
+ 
+ !     SORTING BY DIAGONAL ENERGY
+ !     -----------------------------------------------------------------
+       write(77,'(A)') 'SORTING CONFIGURATIONS BY DIAGONAL ENERGY'
+       allocate(sort(nsc))
+       sort=0
+       call quick_sort(diag,sort,nsc)
+       configs = configs(:,sort)
+
+       IF (doconfsel==1) THEN
+
+          do i=1,nsc
+             if (sort(i)==1) then
+                nref=i
+                exit
+             end if
+          end do
+
+       ELSE
+
+          do i=1,nsc
+             if (sort(i)==nref) then
+                nref=i
+                exit
+             end if
+          end do
+
+       END IF
+
+ !      write(77,'(A)') 'SORT'
+ !      write(77,'(99999I4)') sort
+ 
+ !      write(77,'(A)') 'SORTED CONFIGS'
+ !      do i=1,nsc
+ !         write(77,'(8I3,D15.6)') configs(:,i),diag(i)
+ !      end do
+ 
+ !     BUILDING DIAGONAL HAMILTONIAN
+ !     -----------------------------------------------------------------
+       write(77,'(A)') 'BUILDING DIAGONAL HAMILTONIAN'
+       allocate (Hci(nsc+nsc*(nsc-1)/2))
+       Hci=0d0
+       do ns=1,nsc
+          Hci(ns*(ns+1)/2)=diag(ns)
+       end do
+       allocate (Evhf(nsc))
+       Evhf=diag
+       deallocate(diag,stat=err)
+       if (err/=0) STOP('DEALLOCATION ERROR: Building diag hamiltonian')
+ 
+ 
+ !     BUILDING OFF-DIAGONAL HAMILTONIAN 
+ !     -----------------------------------------------------------------
+       write(77,'(A)') 'BUILDING OFF-DIAGONAL HAMILTONIAN'
+       call csvci_mtrxPS(qva_nml,qumvia_nmc,nvdf,nmods,nconf,configs,Hci,&
+                    &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                    &Qm1,Qm2,Qm3,Hmc,GDm,GTm,sQm1,sQm2,sQm3)
+ 
+ 
+ !     DIAGONALIZING HAMILTONIAN
+ !     -----------------------------------------------------------------
+       write(77,'(A)') 'DIAGONALIZING VCI HAMILTONIAN'
+       tol=2*dlamch('S')
+       allocate(Eci(nsc),Cci(nsc,nsc))
+       allocate ( WORK(8*nsc), IWORK(5*nsc) ,IFAIL(nsc))
+       call dspevx('V','A','U',nsc,Hci,0.0d0,0.05d0,1,10*nvdf,&
+              &tol,10*nvdf,Eci,Cci,nsc,WORK,IWORK,IFAIL,INFO)
+ !     call dspevx('V','I','U',nconf,Hci,0.0d0,0.0d0,1,10*nvdf,&
+ !            &0.0d0,10*nvdf,Eci,Cci,nconf,WORK,IWORK,IFAIL,INFO)
+ 
+       allocate (vec(nsc))
+       if (INFO == 0) then
+          do ev=1,nsc
+ !         do ev=1,10*nvdf
+             ml=maxloc(abs(Cci(:,ev)))
+             if (ml(1)==nref) Eref=Eci(ev)
+             write(77,'(A)') '---------------------------------------------'
+             write(77,'(A,I6,A,F18.8,F11.2)')'EVEC  ',ev,'Eci=',Eci(ev),(Eci(ev)-Eci(1))*h2cm
+             vec = Abs(Cci(:,ev))
+             call quick_sort(vec,sort,nsc)
+             write(77,'(A,8I3)') 'MAIN CONFIGURATION:',configs(:,sort(nsc))
+             write(77,'(A)') 'COEFICIENTS'
+             do cnf=1,nsc
+                if (abs(Cci(sort(nsc-cnf+1),ev))<=0.05) EXIT
+                write(77,'(8I3,F12.5)') configs(:,sort(nsc-cnf+1)), Cci(sort(nsc-cnf+1),ev)
+             end do
+          end do
+ !         write(77,'(A)') 'No   CONFIGURATIONS         VSCF ENERGY VSCF TRANS.   VCI ENERGY  VCI TRANS  '
+ !         do i=1,nsc
+ !            write(77,'(I4,A,6I3,F22.8,F11.2,F14.8,F11.2)') i,' ',sconfigs(:,i),&
+ !                 &Evhf(i),(Evhf(i)-Evhf(1))*h2cm,  &
+ !                 &Eci(i),(Eci(i)-Eci(1))*h2cm
+ !         end do
+       else 
+          print*,'ERROR DURING CI HAMILTONIAN DIAGONALIZATION'
+          print*,'INFO=',INFO
+          print*,'IFAIL=',IFAIL
+       end if
+       deallocate ( WORK,IWORK,IFAIL,Eci,Cci,Evhf,Hci )
+ 
+       end subroutine
  
  
        subroutine confsel(qmaxx1,qmaxx2,qmaxx3,qmaxx4,nvdf,nconf,configs,ngaus,&
@@ -7491,6 +10046,179 @@
  
  
  
+       subroutine diagCImePS(conf,qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,GTm,Emod,&
+                      &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                      &nvdf,ngaus,nmods,nconf,Ediag,sQm1,sQm2,sQm3,qva_nml)
+ !     -----------------------------------------------------------------
+ !     -----------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type), intent(in) :: qva_nml
+       integer,intent(in)   :: qumvia_nmc ! # of coupled modes.
+       integer,intent(in)   :: nvdf   ! # of vibrational deg of freedom.
+       integer,intent(in)   :: nmods  ! # of selected VSCF virtual states.
+       integer,intent(in)   :: nconf  ! Total number of configurations
+       integer,intent(in)   :: ngaus  ! Dimension of gaussian basis set
+       integer,intent(in)   :: conf(8)  ! Reference configuration
+       real*8,intent(in)    :: Qm1(nmods,nmods,nvdf) !Q operator in modals basis
+       real*8,intent(in)    :: Qm2(nmods,nmods,nvdf) !Q^2 operator in modals basis
+       real*8,intent(in)    :: Qm3(nmods,nmods,nvdf) !Q^3 operator in modals basis
+       real*8,intent(in)    :: sQm1(nmods,nmods,nvdf) !Q operator in modals basis
+       real*8,intent(in)    :: sQm2(nmods,nmods,nvdf) !Q^2 operator in modals basis
+       real*8,intent(in)    :: sQm3(nmods,nmods,nvdf) !Q^3 operator in modals basis
+       real*8,intent(in)    :: Hmc(nmods,nmods,nvdf) !Core hamiltonian in modals basis.
+       real*8,intent(in)    :: GDm(nmods,nmods,nvdf) !Core hamiltonian in modals basis.
+       real*8,intent(in)    :: GTm(nmods,nmods,nvdf) !Core hamiltonian in modals basis.
+       real*8,intent(in)    :: Emod(ngaus,nvdf)       ! Modal energies.
+       real*8,intent(in)    :: tiij(nvdf,nvdf)   ! Coupling potential parameters
+       real*8,intent(in)    :: tjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiiij(nvdf,nvdf)
+       real*8,intent(in)    :: ujjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiijj(nvdf,nvdf)
+       real*8,intent(in)    :: tijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uiijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijjk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijkk(nvdf,nvdf,nvdf)
+       real*8,intent(out)   :: Ediag
+ 
+       integer :: i,a,b,c
+       integer :: nm1,nm2,nm3,nm4
+       integer :: qn1,qn2,qn3,qn4
+       integer :: cnf
+       integer :: sref
+       integer :: n1,n2,n3 ! Various indices.
+       integer :: psi(nvdf) ! VSCF wavefunction. Array of vib. quantum numbers.
+       real*8 :: Vc2       ! Auxiliary variable for Hci calculation.
+       real*8 :: Vc3       ! Auxiliary variable for Hci calculation.
+       real*8 :: ehf       ! Auxiliary variable for Hci calculation.
+       real*8 :: Hcore     ! Auxiliary variable for Hci calculation.
+       real*8 :: veff      ! Auxiliary variable for Hci calculation.
+       real*8 :: veff2     ! Auxiliary variable for Hci calculation.
+       real*8 :: veff3     ! Auxiliary variable for Hci calculation.
+       real*8 :: absethresh
+       real*8 :: Ehf0      ! DEBUG
+       real*8 :: corr      ! DEBUG
+ 
+       integer             :: ierr
+       integer             :: nmorse, nsinh, npartsub
+       integer,allocatable :: morsemods(:), sinhmods(:), partsubdf(:)
+       real*8,allocatable  :: afac(:)
+       namelist /auxcoords/ morsemods,sinhmods,afac,partsubdf
+
+       real*8, parameter :: h2cm = 219474.63d0 ! cm-1/Ha
+!      -----------------------------------------------------------------
+
+!      Read partial coordinate substitution parameters from input file.
+       nmorse = qva_nml%nmorse
+       nsinh = qva_nml%nsinh
+       npartsub = qva_nml%npartsub
+
+       allocate (morsemods(nmorse),sinhmods(nsinh),afac(nvdf),partsubdf(npartsub))
+       afac=1d0
+       rewind 10
+       read(10,nml=auxcoords,iostat=ierr)
+       if ( ierr > 0 ) then
+          STOP('ERROR READING AUXCOORDS NAMELIST')
+       end if
+       
+       nm1=conf(1)
+       qn1=conf(2)
+       nm2=conf(3)
+       qn2=conf(4)
+       nm3=conf(5)
+       qn3=conf(6)
+       nm4=conf(7)
+       qn4=conf(8)
+ 
+       psi=0
+       if (nm1 > 0) psi(nm1)=qn1
+       if (nm2 > 0) psi(nm2)=qn2
+       if (nm3 > 0) psi(nm3)=qn3
+       if (nm4 > 0) psi(nm4)=qn4
+ 
+ !     VSCF energy.
+       ehf=0d0
+       do a=1,nvdf
+          ehf = ehf + Emod(psi(a)+1,a)
+       end do
+ 
+ !     Core hamiltonian
+       Hcore=0d0
+       do a=1,nvdf
+          Hcore= Hcore + Hmc(psi(a)+1,psi(a)+1,a)
+       end do
+ 
+ !     Average on effective potential.
+       veff2=0d0
+       do a=1,nvdf
+          veff2 = veff2 + GDm(psi(a)+1,psi(a)+1,a)
+       end do
+       veff3=0d0
+       do a=1,nvdf
+          veff3 = veff3 + GTm(psi(a)+1,psi(a)+1,a)
+       end do
+       veff = veff2 + veff3
+ 
+ !     2-MODE COUPLING POTENTIAL 
+       Vc2=0.0d0
+       do a=1,nvdf-1
+          do b=a+1,nvdf
+             n1=psi(a)+1
+             n2=psi(b)+1
+             if (ANY(partsubdf==a) .AND. ANY(partsubdf==b)) then
+                Vc2=Vc2+&
+                & tiij(a,b)*sQm2(n1,n1,a)*sQm1(n2,n2,b)/2.0d0+&
+                & tjji(a,b)*sQm1(n1,n1,a)*sQm2(n2,n2,b)/2.0d0+&
+                & uiiij(a,b)*sQm3(n1,n1,a)*sQm1(n2,n2,b)/6.0d0+&
+                & ujjji(a,b)*sQm1(n1,n1,a)*sQm3(n2,n2,b)/6.0d0+&
+                & uiijj(a,b)*sQm2(n1,n1,a)*sQm2(n2,n2,b)/4.0d0  
+             else
+                Vc2=Vc2+&
+                & tiij(a,b)*Qm2(n1,n1,a)*Qm1(n2,n2,b)/2.0d0+&
+                & tjji(a,b)*Qm1(n1,n1,a)*Qm2(n2,n2,b)/2.0d0+&
+                & uiiij(a,b)*Qm3(n1,n1,a)*Qm1(n2,n2,b)/6.0d0+&
+                & ujjji(a,b)*Qm1(n1,n1,a)*Qm3(n2,n2,b)/6.0d0+&
+                & uiijj(a,b)*Qm2(n1,n1,a)*Qm2(n2,n2,b)/4.0d0  
+             end if
+          end do
+       end do
+ 
+ !     3-MODE COUPLING POTENTIAL
+       Vc3=0d0
+       IF (qumvia_nmc == 3) THEN
+       do a=1,nvdf-2
+          do b=a+1,nvdf-1
+             do c=b+1,nvdf
+                n1=psi(a)+1
+                n2=psi(b)+1
+                n3=psi(c)+1
+ 
+                if (ANY(partsubdf==a) .AND. &
+                  & ANY(partsubdf==b) .AND. &
+                  & ANY(partsubdf==c)) then
+                   Vc3=Vc3+&
+                    & tijk(a,b,c)*sQm1(n1,n1,a)*sQm1(n2,n2,b)*sQm1(n3,n3,c)+&
+                    & uiijk(a,b,c)*sQm2(n1,n1,a)*sQm1(n2,n2,b)*sQm1(n3,n3,c)/2d0+&
+                    & uijjk(a,b,c)*sQm1(n1,n1,a)*sQm2(n2,n2,b)*sQm1(n3,n3,c)/2d0+&
+                    & uijkk(a,b,c)*sQm1(n1,n1,a)*sQm1(n2,n2,b)*sQm2(n3,n3,c)/2d0
+                else
+                   Vc3=Vc3+&
+                    & tijk(a,b,c)*Qm1(n1,n1,a)*Qm1(n2,n2,b)*Qm1(n3,n3,c)+&
+                    & uiijk(a,b,c)*Qm2(n1,n1,a)*Qm1(n2,n2,b)*Qm1(n3,n3,c)/2d0+&
+                    & uijjk(a,b,c)*Qm1(n1,n1,a)*Qm2(n2,n2,b)*Qm1(n3,n3,c)/2d0+&
+                    & uijkk(a,b,c)*Qm1(n1,n1,a)*Qm1(n2,n2,b)*Qm2(n3,n3,c)/2d0
+                end if 
+             end do
+          end do
+       end do
+       END IF
+ 
+ !     DANGER
+ !      Ediag=Hcore+Vc2+Vc3
+ !      Ediag=ehf-Vc2-2.0d0*Vc3
+       Ediag=ehf-veff+Vc2+Vc3
+       
+       end subroutine
  
  
        subroutine calcPCE(conf1,conf2,E1,E2,qumvia_nmc,&
@@ -8109,6 +10837,138 @@
  
  
  
+       subroutine csvci_mtrxPS(qva_nml,qumvia_nmc,nvdf,nmods,nconf,configs,Hci,&
+                    &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                    &Qm1,Qm2,Qm3,Hmc,GDm,GTm,sQm1,sQm2,sQm3)
+ !     -----------------------------------------------------------------
+ !     Computes Off-diagonal Hamiltonian matrix elements 
+ !                      < K | H | L >
+ !     where | K > and | L > may differ in 1 (case 1), 2 (case 2) and 
+ !     more than 2 (case 3) modals. This subroutine runs over all off-
+ !     diagonal matrix elements, determines to which case each belong
+ !     and then computes the integral using subroutines calcHterm1 
+ !     for case 1 matrix elements, calcHterm2 for case 2 ME or
+ !     sets Hci(cnf)=0.0 for case 3.
+ !     -----------------------------------------------------------------
+       implicit none
+ 
+       type(qva_nml_type), intent(in) :: qva_nml
+       integer,intent(in)   :: qumvia_nmc
+       integer,intent(in)   :: nvdf,nmods,nconf
+       integer,intent(in)   :: configs(8,nconf)
+       real*8,intent(in)    :: Qm1(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm2(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Qm3(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm1(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm2(nmods,nmods,nvdf)
+       real*8,intent(in)    :: sQm3(nmods,nmods,nvdf)
+       real*8,intent(in)    :: Hmc(nmods,nmods,nvdf)
+       real*8,intent(in)    :: GDm(nmods,nmods,nvdf)
+       real*8,intent(in)    :: GTm(nmods,nmods,nvdf)
+       real*8,intent(in)    :: tiij(nvdf,nvdf)
+       real*8,intent(in)    :: tjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiiij(nvdf,nvdf)
+       real*8,intent(in)    :: ujjji(nvdf,nvdf)
+       real*8,intent(in)    :: uiijj(nvdf,nvdf)
+       real*8,intent(in)    :: tijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uiijk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijjk(nvdf,nvdf,nvdf)
+       real*8,intent(in)    :: uijkk(nvdf,nvdf,nvdf)
+       real*8,intent(inout) :: Hci(nconf+nconf*(nconf-1)/2)
+ 
+       integer    :: a
+       integer    :: b
+       integer    :: i
+       integer    :: j
+       integer    :: cnf
+       integer    :: nm1
+       integer    :: nm2
+       integer    :: nm3
+       integer    :: nm4
+       integer    :: nm5
+       integer    :: nm6
+       integer    :: nm7
+       integer    :: nm8
+       integer    :: qn1
+       integer    :: qn2
+       integer    :: qn3
+       integer    :: qn4
+       integer    :: qn5
+       integer    :: qn6
+       integer    :: qn7
+       integer    :: qn8
+       integer    :: ndif
+       integer    :: dif(3)
+       integer    :: psi1(nvdf)
+       integer    :: psi2(nvdf)
+ !     -----------------------------------------------------------------
+ 
+       do i=1,nconf-1
+          do j=i+1,nconf
+             cnf=i+j*(j-1)/2
+             nm1=configs(1,i)
+             qn1=configs(2,i)
+             nm2=configs(3,i)
+             qn2=configs(4,i)
+             nm3=configs(5,i)
+             qn3=configs(6,i)
+             nm4=configs(7,i)
+             qn4=configs(8,i)
+ 
+             nm5=configs(1,j)
+             qn5=configs(2,j)
+             nm6=configs(3,j)
+             qn6=configs(4,j)
+             nm7=configs(5,j)
+             qn7=configs(6,j)
+             nm8=configs(7,j)
+             qn8=configs(8,j)
+ 
+             psi1=0
+             psi2=0
+ 
+             if (nm1 > 0) psi1(nm1)=qn1
+             if (nm2 > 0) psi1(nm2)=qn2
+             if (nm3 > 0) psi1(nm3)=qn3
+             if (nm4 > 0) psi1(nm4)=qn4
+ 
+             if (nm5 > 0) psi2(nm5)=qn5
+             if (nm6 > 0) psi2(nm6)=qn6
+             if (nm7 > 0) psi2(nm7)=qn7
+             if (nm8 > 0) psi2(nm8)=qn8
+ 
+             dif=0
+             ndif=0
+             do a=1,nvdf
+                if ( psi1(a) /= psi2(a) ) then
+                   ndif=ndif+1
+                   if (ndif >= 4) EXIT 
+                   dif(ndif)=a
+                end if
+             end do
+ 
+             select case (ndif)
+                case (1)
+                   call calcHterm1PS(qva_nml,qumvia_nmc,Qm1,Qm2,Qm3,Hmc,GDm,&
+                    &GTm,sQm1,sQm2,sQm3,tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                    &nvdf,nmods,nconf,Hci,cnf,psi1,psi2,dif)
+                case (2)
+                   call calcHterm2PS(qva_nml,qumvia_nmc,Qm1,Qm2,Qm3,sQm1,sQm2,sQm3,&
+                   &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                   &nvdf,nmods,nconf,Hci,cnf,psi1,psi2,dif)
+                case (3)
+                   call calcHterm3PS(qva_nml,qumvia_nmc,Qm1,Qm2,Qm3,sQm1,sQm2,sQm3,&
+                   &tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                   &nvdf,nmods,nconf,Hci,cnf,psi1,psi2,dif)
+                case default
+                   Hci(cnf)=0.0d0
+             end select
+ 
+             if (Abs(Hci(cnf)) < 1d-9) Hci(cnf)=0d0
+ 
+          end do
+       end do
+       end subroutine
  
  
  

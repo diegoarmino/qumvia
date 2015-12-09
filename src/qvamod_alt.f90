@@ -227,11 +227,17 @@ contains
          if (nconf > 500000) nconf=500000
 !        Number of reference states to compute
          nrst=1+nvdf+naddref
-!        DANGER version 2 of the following subroutine
-         call ssvscf_csvci2(qva_nml,qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
-                         &selcut2,ndf,nvdf,ngaus,nmcoup,nqmatoms,nclatoms,&
-                         &qmaxx1,qmaxx2,qmaxx3,qmaxx4,nconf,at_numbers,dy,gwidth,&
-                         &eig,nmodes,qvageom,clcoords,naddref,nrst)
+         if (qva_nml%nmorse+qva_nml%nsinh > 0 .AND. qva_nml%dopartsub == .TRUE.) then
+            call ssvscf_csvciPS(qva_nml,qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
+                            &selcut2,ndf,nvdf,ngaus,nmcoup,nqmatoms,nclatoms,&
+                            &qmaxx1,qmaxx2,qmaxx3,qmaxx4,nconf,at_numbers,dy,gwidth,&
+                            &eig,nmodes,qvageom,clcoords,naddref,nrst)
+         else
+            call ssvscf_csvci2(qva_nml,qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
+                            &selcut2,ndf,nvdf,ngaus,nmcoup,nqmatoms,nclatoms,&
+                            &qmaxx1,qmaxx2,qmaxx3,qmaxx4,nconf,at_numbers,dy,gwidth,&
+                            &eig,nmodes,qvageom,clcoords,naddref,nrst)
+         end if
    
          deallocate(P,Po,Q1,Q2,Q3,Hcore,hii,tiii,uiiii,tiij,tjji,&
                    &uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk)
@@ -490,6 +496,182 @@ contains
  
        end subroutine
 
+       subroutine ssvscf_csvciPS(qva_nml,qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
+                          &selcut2,ndf,nvdf,ngaus,nmcoup,nqmatoms,nclatoms,&
+                          &qmaxx1,qmaxx2,qmaxx3,qmaxx4,nconf,at_numbers,dy,gwidth,&
+                          &eig,nmodes,qmcoords,clcoords,naddref,nrst)
+ !     -----------------------------------------------------------------
+ !     THIS SUBROUTINE PERFORMS VIBRATIONAL SELF-CONSISTENT FIELD 
+ !     FOLLOWED BY CONFIGURATION INTERACTION CALCULATION IN A 
+ !     STATE-SPECIFIC FASHION. EXCLUSIVE FOR PARTIAL (MORSE/SINH/WHATEVER)
+ !     SUBSTITUTION SCHEME.
+ !     A separate VSCF and VCI computation is performed for each state
+ !     of interest, by default the ground state and the first excited 
+ !     states of each normal mode, using that state as the reference.
+ !     The reference state is the vscf configuration over which the
+ !     effective potential is computed.
+ !     -----------------------------------------------------------------
+       implicit none
+ 
+       type(qva_cli_type), intent(in) :: qva_cli
+       type(qva_nml_type), intent(in) :: qva_nml
+       integer,intent(in)  :: nrst
+       integer,intent(in)  :: qumvia_nmc           ! # of coupled mode in Hci
+       integer,intent(in)  :: qumvia_qff           ! # keyword for qff read/calc
+       integer,intent(in)  :: naddref              ! # of additional ref confs.
+       integer,intent(in)  :: ndf                  ! Number of classical atoms
+       integer,intent(in)  :: nvdf                 ! Number of classical atoms
+       integer,intent(in)  :: ngaus                ! Number of classical atoms
+       integer,intent(in)  :: nmcoup               ! Number of normal modes to couple in QFF.
+       integer,intent(in)  :: nqmatoms             ! Number of QM atoms
+       integer,intent(in)  :: nclatoms             ! Number of classical atoms
+       integer,intent(in)  :: qmaxx1               ! Max excitation for singles.
+       integer,intent(in)  :: qmaxx2               ! Max excitation for doules.
+       integer,intent(in)  :: qmaxx3               ! Max excitation for triples
+       integer,intent(in)  :: qmaxx4               ! Max excitation for quadruples
+       integer,intent(in)  :: nconf                ! Dimension of CI basis set.
+       integer,intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+       real*8,intent(in)   :: dy                   ! Step size factor for num derivatives.
+       real*8,intent(in)   :: resthresh            ! Step size factor for num derivatives.
+       real*8,intent(in)   :: ethresh              ! Step size factor for num derivatives.
+       real*8,intent(in)   :: selcut1              ! Step size factor for num derivatives.
+       real*8,intent(in)   :: selcut2              ! Step size factor for num derivatives.
+       real*8,intent(in)   :: gwidth               ! Width factor for gaussian primitives.
+       real*8,intent(in)   :: eig(ndf)             ! Eigenvalues of the hessian matrix.
+       real*8,intent(in)   :: nmodes(ndf,ndf)      ! Eigenvectors of the hessian matrix.
+       real*8,intent(in)   :: qmcoords(3,nqmatoms) ! QM atom coordinates
+       real*8,intent(in)   :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
+ 
+       integer            :: i
+       integer            :: ref(8)
+       integer            :: cnf
+       integer            :: bdim
+       integer            :: trash
+       integer            :: vscfstat
+       real*8             :: alpha(nvdf)
+       real*8             :: P(ngaus,ngaus,nvdf)  ! Modals coeficient matrices.
+       real*8             :: Po(ngaus,ngaus,nvdf)  ! Modals coeficient matrices.
+       real*8             :: Scho(ngaus,ngaus,nvdf)  ! Cholesky factor.
+       real*8             :: Evscf                ! VSCF energy.
+       real*8             :: Q1(ngaus,ngaus,nvdf) !  <gi|Qa^1|gj> matrix
+       real*8             :: Q2(ngaus,ngaus,nvdf) !  <gi|Qa^2|gj> matrix
+       real*8             :: Q3(ngaus,ngaus,nvdf) !  <gi|Qa^3|gj> matrix
+       real*8             :: sQ1(ngaus,ngaus,nvdf) !  <gi|Qa^1|gj> matrix (substituted)
+       real*8             :: sQ2(ngaus,ngaus,nvdf) !  <gi|Qa^2|gj> matrix (substituted)
+       real*8             :: sQ3(ngaus,ngaus,nvdf) !  <gi|Qa^3|gj> matrix (substituted)
+       real*8             :: Hcore(ngaus,ngaus,nvdf) ! Core Hamiltonian (non-orthogonal basis)
+       real*8             :: Essvhf(nrst)
+       real*8             :: Pss(ngaus,nrst)
+       real*8             :: Poss(ngaus,nrst)
+       real*8             :: GDmtrx(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8             :: GTmtrx(ngaus,ngaus,nvdf)! Effective potential matrix.
+       real*8             :: Emod(ngaus,nvdf)       ! Modal energies.
+       real*8             :: hii(nvdf)             ! Diagonal Hessian eigenvalues.
+       real*8             :: tiii(nvdf)           ! Diagonal cubic coupling terms
+       real*8             :: uiiii(nvdf)          ! Diagonal quartic coupling terms
+       real*8             :: tiij(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8             :: tjji(nvdf,nvdf)      ! 2-mode cubic coupling terms
+       real*8             :: uiiij(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8             :: ujjji(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8             :: uiijj(nvdf,nvdf)     ! 2-mode quartic coupling terms
+       real*8             :: tijk(nvdf,nvdf,nvdf)      ! 3-mode cubic coupling terms
+       real*8             :: uiijk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8             :: uijjk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8             :: uijkk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+       real*8             :: Evci(nrst)
+       real*8             :: Eref
+       real*8, parameter :: h2cm = 219474.63d0 ! cm-1/Ha
+ 
+ !     Allocatable variables.
+       integer,allocatable,dimension(:,:) :: addrefs
+       integer,allocatable,dimension(:,:) :: fundrefs
+       integer,allocatable,dimension(:,:) :: refstat
+ 
+ !     -----------------------------------------------------------------
+ !     GENERATING REFERENCE FONFIGURATIONS
+      
+       write(77,'(A,I3)') 'NUMBER OF ADDITIONAL REFERENCE CONFIGS:',naddref
+       if (naddref > 0) then 
+          allocate ( addrefs(8,naddref),fundrefs(8,nvdf+1) )
+          addrefs=0
+          fundrefs=0
+          call readaddref(naddref,addrefs)
+          call genConf3(0,0,0,0,hii,ethresh,nvdf,nvdf+1,trash,fundrefs)
+          allocate ( refstat(8,nrst) )
+          refstat=0
+          refstat(:,1:nvdf+1) = fundrefs
+          refstat(:,nvdf+2:nrst) = addrefs
+          deallocate (addrefs,fundrefs)
+       else
+          allocate ( refstat(8,nrst) )
+          refstat=0
+          call genConf3(0,0,0,0,hii,ethresh,nvdf,nvdf+1,trash,refstat)
+       end if
+       write(77,'(A)') 'REFERENCE CONFIGURATIONS'
+!       do i=1,nrst+naddref
+       do i=1,nrst
+          write(77,'(8I3)') refstat(:,i)
+       end do
+ 
+ 
+ !     QUARTIC FORCE FIELD
+ !     ---------------------------------------------------------------
+       call selectqff(qva_cli,qumvia_qff,nmodes,eig,dy,nqmatoms,nclatoms,&
+                      &qmcoords,clcoords,at_numbers,ndf,nvdf,&
+                      &hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,uiijj,&
+                      &tijk,uiijk,uijjk,uijkk)
+
+ !     CONVERT QFF IF MORSE OR SINH COORDINATES ARE REQUIRED.
+       if (qva_nml%nmorse /= 0 .OR. qva_nml%nsinh /= 0) then
+          if (qva_nml%dopartsub == .TRUE.) then
+             call convertQFFps(qva_nml,nvdf,hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,&
+                              & uiijj,tijk,uiijk,uijjk,uijkk,alpha)
+          else
+             call convertQFF(qva_nml,nvdf,hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,&
+                              & uiijj,tijk,uiijk,uijjk,uijkk,alpha)
+          end if
+       end if
+ 
+ !     COMPUTING VSCF/VCI OVER THESE CONFIGURATIONS      
+       do cnf=1,nrst
+ !        Computing VSCF
+          ref(:) = refstat(:,cnf)
+          call ssvscfps(ref,nmodes,eig,dy,nmcoup,gwidth,nqmatoms,nclatoms,&
+                    &ngaus,qmcoords,clcoords,at_numbers,ndf,nvdf,&
+                    &P,Po,Scho,Evscf,Q1,Q2,Q3,sQ1,sQ2,sQ3,Hcore,GDmtrx,GTmtrx,Emod,&
+                    &hii,tiii,uiiii,tiij,tjji,uiiij,ujjji,uiijj,&
+                    &tijk,uiijk,uijjk,uijkk,vscfstat,qva_nml,alpha)
+          if (vscfstat /=0) CYCLE
+          Essvhf(cnf)=Evscf
+          Pss(:,cnf)=P(:,cnf,cnf)
+          Poss(:,cnf)=Po(:,cnf,cnf)
+ 
+ !        Computing VCI
+!          write(77,'(A,8I3)') 'COMPUTING VCI FOR REFERENCE STATE ',ref
+          bdim=qmaxx1+1
+          call csVCIps(qva_nml,ref,qumvia_nmc,ethresh,resthresh,selcut1,selcut2,&
+                    &Po,Q1,Q2,Q3,sQ1,sQ2,sQ3,Hcore,GDmtrx,GTmtrx,Scho,Emod,&
+                    &hii,tiij,tjji,uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk,&
+                    &nconf,ngaus,nvdf,qmaxx1,qmaxx2,qmaxx3,qmaxx4,bdim,Eref)
+          Evci(cnf)=Eref*h2cm
+       end do
+ 
+       write(77,*)
+       write(77,*)
+       write(77,'(A)') '#######################################################'
+       write(77,'(A)') 'FINAL RESULTS FINAL RESULTS FINAL RESULTS FINAL RESULTS'
+       write(77,'(A)') '#######################################################'
+       write(77,*)
+       write(77,'(A)') 'ssVSCF AND csVCI ENERGIES AND TRANSITIONS (CM-1)'
+       write(77,'(A)') 'No.       E(ssVSCF)      dE(ssVSCF)        E(csVCI)        dE(csVCI)'
+       write(77,*)
+       do cnf=1,nrst
+          write(77,'(I3,4F16.2)') cnf-1, Essvhf(cnf), Essvhf(cnf)-Essvhf(1),&
+                                 & Evci(cnf),Evci(cnf)-Evci(1)
+       end do
+ 
+ 
+       end subroutine
 #ifdef qvacpu
 end module qvamod_cpu
 #else
