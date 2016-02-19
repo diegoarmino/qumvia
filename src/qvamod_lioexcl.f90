@@ -558,6 +558,197 @@ contains
 
      end subroutine
 
+     subroutine eckart(hess,qmcoords,at_numbers,ndf,nqmatoms,hessp)
+     implicit none
+!    ------------------------------------------------------------------
+     integer,intent(in)  :: ndf
+     integer,intent(in)  :: nqmatoms
+     integer,intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+     real*8,intent(in)   :: hess(ndf,ndf)
+     real*8,intent(in)   :: qmcoords(3,nqmatoms)
+     real*8,intent(out)  :: hessp(ndf,ndf)
+!    Internal variables
+     integer             :: i,j,k,iat
+     integer             :: zeros(2),nonz(2)
+     integer             :: ipiv(3)
+     real*8              :: Mass(ndf)
+     real*8              :: X0(3,nqmatoms)
+     real*8              :: Itsr(3,3)
+     real*8              :: innp(3,3)
+     real*8              :: outp(3,3)
+     real*8              :: ai(3)
+     real*8              :: atmp
+     real*8              :: cutoff
+     real*8              :: det
+     real*8              :: trp
+     real*8              :: summ
+     real*8              :: totM
+     real*8              :: P(ndf,ndf)
+     real*8              :: tmp(ndf,ndf)
+     real*8              :: cmass(3)
+     real*8              :: TRmat(ndf,6)
+     real*8              :: unitv(3,3)
+     real*8              :: SV(6)
+
+     real*8,external  :: ddot
+
+     real*8,  dimension(:,:), allocatable :: VT,U
+
+     real*8,  dimension(:), allocatable :: WORK,IWORK
+     integer                            :: LWORK,INFO
+     include "qvmbia_param.f"
+!    ------------------------------------------------------------------
+
+     unitv=reshape((/ 1d0, 0d0, 0d0, &
+                  &   0d0, 1d0, 0d0, &
+                  &   0d0, 0d0, 1d0 /),(/3,3/))
+
+!    Converting initial coordinates to AU
+     X0=qmcoords/a0
+!     write(77,'(A)') 'CONVERSION FACTOR a0 -> Angs'
+!     write(77,'(D12.3)') a0
+      
+!    Computing total mass and atomic mass array and center of mass.
+     totM=0.0d0
+     do i=1,nqmatoms
+         do j=1,3
+             k=at_numbers(i)
+             Mass(3*(i-1)+j) = sqrt_atomic_masses_au(k)
+             cmass(j)=cmass(j)+atomic_masses_au(k)*X0(j,i)
+         end do
+         totM=totM+atomic_masses_au(k)
+     end do
+     cmass = cmass/totM
+
+!    Translating to center of mass and mass-weighting.
+     do i=1,nqmatoms
+        do j=1,3
+           X0(j,i)=(X0(j,i)-cmass(j))*Mass(3*(i-1)+j)
+        end do
+     end do
+
+
+!    Moment of inertia tensor.
+!    Itsr = Sum_i [ai**T.ai - ai.ai**T]
+     Itsr=0.0d0
+     do i=1,nqmatoms
+        ai=X0(:,i)
+        innp=0.0d0
+        outp=0.0d0
+        innp(1,1) = ddot(3,ai,1,ai,1)
+        innp(2,2) = innp(1,1)
+        innp(3,3) = innp(1,1)
+        call dger(3,3,1d0,ai,1,ai,1,outp,3)
+!        call dsyr('U',3,1d0,ai,1,outp,3)
+        Itsr=Itsr+innp-outp
+     end do
+
+!    Symmetrizing inertia tensor.
+     do i=1,2
+        do j=i+1,3
+          Itsr(j,i)=Itsr(i,j)
+        end do
+     end do
+
+!     write(77,'(A)') 'INERTIA TENSOR'
+!     do i=1,3
+!        write(77,'(3D11.2)') Itsr(i,:)
+!     end do
+
+
+!    WE NOW COMPUTE THE PROJECTOR MATRIX P
+!    THE FORMULA CAN BE FOUND IN 
+!    Szalay, JCP 140:234107, (2014), eq 9, and eq. 17
+!    Note that although eq. 12 is only an orthonormalized version of
+!    eq. 9. Also, we only implemented Eckart conditions. Sayvetz 
+!    conditions are left for another time.
+
+!    Also, the following paper may be of interest.
+!    Miller, Handy and Adams, JCP 72:99,(1980) eq 4.11
+
+!    The imposition of Eckart conditions is made by projection.
+
+!                  PHess = P.Hess.P
+
+!    Initializing TRmat
+     Trmat=0d0
+
+!    Computing translation and rotation vectors.
+     do i=1,3
+        do iat=1,nqmatoms
+           TRmat(3*(iat-1)+i,i)=Mass(3*(iat-1)+i)/Sqrt(TotM)  ! Translation
+           TRmat(3*(iat-1)+i,4:6) = crossp(X0(:,iat),unitv(i,:)) ! Rotation
+        end do
+     end do
+
+!    Orthonormalization of translation and rotation vectors by singular value decomposition method.
+     LWORK=-1
+     allocate(VT(6,6),U(0,0),WORK(1000),IWORK(8*6))
+     call dgesdd('O',ndf,6,TRmat,ndf,SV,U,ndf,VT,6,WORK,LWORK,IWORK,INFO)
+     LWORK=WORK(1)
+     deallocate(WORK)
+     allocate(WORK(LWORK))
+     call dgesdd('O',ndf,6,TRmat,ndf,SV,U,ndf,VT,6,WORK,LWORK,IWORK,INFO)
+     deallocate(WORK,IWORK,U,VT)
+     if (INFO /= 0) STOP ('Error during singular value decomposition in eckart subroutine')
+
+!    Building projection matrix by external product of TRmat.
+     call dgemm('n','t',ndf,ndf,6,1d0,TRmat,ndf,TRmat,ndf,0d0,P,ndf)
+     
+     P=-P
+     do i=1,ndf
+        P(i,i) = 1.0d0 + P(i,i)
+     end do
+
+!     cutoff = 1.0d-08
+!     do i=1,ndf-1
+!        do j=i+1,ndf
+!           if (abs(P(i,j)) < cutoff) P(i,j)=0d0
+!           P(j,i)=P(i,j)
+!        end do
+!     end do
+!     write(77,'(A)') 'PROJECTOR 1-P'
+!     do i=1,ndf
+!        write(77,'(999D9.2)') P(i,:)
+!     end do
+
+
+!    PROJECTION
+!    HESSP = (1-P).HESS.(1-P)
+     hessp=0d0
+     call dsymm('L','U',ndf,ndf,1d0,hess,ndf,P,ndf,0d0,tmp,ndf)
+     call dgemm('N','N',ndf,ndf,ndf,1d0,P,ndf,tmp,ndf,0d0,hessp,ndf)
+     do i=1,ndf
+        do j=1,ndf
+           if (abs(hessp(i,j)) < 1d-10) hessp(i,j)=0d0
+        end do
+     end do
+!     write(77,'(A)') 'PROJECTED HESSIAN'
+!     do i=1,ndf
+!        write(77,'(999D10.2)') hessp(i,:)
+!     end do
+    
+     return
+
+     end subroutine
+
+     function crossp(v1,v2)
+!       ---------------------------------------------------------------------
+!       Computes cross product v1 x v2 = vr, with all vectors dimension 3
+!       ---------------------------------------------------------------------
+        real*8  :: v1(3), v2(3)
+        integer :: i
+
+        real*8,dimension(3) :: crossp
+
+        crossp(1) = v1(2)*v2(3)-v1(3)*v2(2)
+        crossp(2) = v1(3)*v2(1)-v1(1)*v2(3)
+        crossp(3) = v1(1)*v2(2)-v1(2)*v2(1)
+       
+        return
+     end function crossp
+
+ 
      subroutine fixphase(hess,qmcoords,ndf,nqmatoms)
 !    ------------------------------------------------------------------------ 
 !    FIXES THE PHASE OF THE EIGENVECTORS OF THE HESSIAN BY COMPUTING THE 
@@ -751,8 +942,8 @@ contains
       end do
 
 !     Projecting out translational and rotaional modes form hessian
-      call projHessian(hess,qmcoords,at_numbers,3*nqmatoms,nqmatoms,hessp)
-      hess = hessp
+!      call projHessian(hess,qmcoords,at_numbers,3*nqmatoms,nqmatoms,hessp)
+      call eckart(hess,qmcoords,at_numbers,3*nqmatoms,nqmatoms,hessp)
 
 !     Write hessian to file
 !      write(77,*), '     WRITING HESSIAN MATRIX     '
@@ -790,6 +981,64 @@ contains
       format1="(9999F9.2)"
       format2="(9999D11.3)"
 !     Write eigenvector and eigenvalues to file
+      write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*) '     HESSIAN DIAGONALIZATION WITHOUT ECKART CONDITIONS'
+      write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*) 
+      write(77,*) 
+      write(77,*) '     CONVERSION FACTOR        '
+      write(77,*) '     --------------------     '
+      write(77,format2) h2cm
+      write(77,*) '     EIGENVALUES AU           '
+      write(77,*) '     --------------------     '
+      write(77,format2) eig
+      write(77,*) '     FREQUENCIES CM-1         '
+      write(77,*) '     --------------------     '
+      write(77,format1) freq
+      write(77,*) '     WRITING EIGENVECTORS     '
+      write(77,*) '     --------------------     '
+      write(77,*)
+      do k=1,nqmatoms
+         r=3*(k-1)+1
+         s=r+2
+         write(77,format1)  (hess(r:s,j),j=7,ncoords)
+      end do
+
+      hess = hessp
+
+!     Scaling hessian to avoid numerical problems.
+      hess=hess*1.0D03
+
+
+!     DIAGONALIZATION OF THE HESSIAN
+      allocate ( work(1000), IWORK(1000) )
+      LWORK=-1
+      call dsyevd('V','U',ncoords,hess,ncoords,eig,WORK,LWORK,IWORK,LWORK,INFO)
+      LWORK=WORK(1)
+      LIWORK=IWORK(1)
+      if(allocated(WORK2)) deallocate (WORK2,IWORK2)
+      allocate (WORK2(LWORK),IWORK2(LIWORK))
+      call dsyevd('V','U',ncoords,hess,ncoords,eig,WORK2,LWORK,IWORK2,LIWORK,INFO)
+      deallocate( WORK, IWORK, WORK2, IWORK2 )
+
+
+      eig=eig/AMU_TO_AU
+!     Convert frequecies to wavenumbers
+      do i = 1,ncoords
+         freq(i) = sign(sign_eig(i),eig(i))*h2cm*sqrt(abs(eig(i)))
+      ENDDO
+
+!     Fix the phase of the eigenvectors
+      call fixphase(hess,qmcoords,ncoords,nqmatoms)
+
+
+      format1="(9999F9.2)"
+      format2="(9999D11.3)"
+!     Write eigenvector and eigenvalues to file
+      write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*) '     VIBRATIONAL RESULTS WITH ECKART CONDITIONS'
+      write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*) 
       write(77,*) '     CONVERSION FACTOR        '
       write(77,*) '     --------------------     '
       write(77,format2) h2cm
