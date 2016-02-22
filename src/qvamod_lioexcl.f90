@@ -858,25 +858,25 @@ contains
       real*8, PARAMETER :: invsqrt_atomic_masses_au(18) = 1.0d0/SQRT(atomic_masses_au)
       real*8, PARAMETER :: D1=1.0D00, D2=2.0D00
       real*8, PARAMETER :: PI  =   D2*ACOS(0.0D00)      ! PI
-      real*8, PARAMETER :: h2cm=219475.64d0  ! Convert Hartree to cm-1
+      real*8, PARAMETER :: h2cm=219475.64d0  ! Convert hartee/bohr^2/emu to cm-1
       real*8, PARAMETER :: A0  =   0.5291771D00  ! bohr radius in angs. Conv bohr to angs
 
 !     -------------------------------------------------------------------------
 !
-!     Set up some constants
-!     First, WAVE: factor for converting frequencies from AU to cm-1
 !
 !     -------------------------------------------------------------------------
 !     DEBUG
 !     -------------------------------------------------------------------------
-!     write(77,'(A)') 'AMU_TO_AU'
-!     write(77,'(D14.4)') AMU_TO_AU
-!     write(77,'(A)') 'atomic masses in AU'
-!     write(77,'(18D14.4)') atomic_masses_au
-!     write(77,'(A)') 'sqrt_atomic_masses_au'
-!     write(77,'(18D14.4)') sqrt_atomic_masses_au
-!     write(77,'(A)') 'invsqrt_atomic_masses_au'
-!     write(77,'(18D14.4)') invsqrt_atomic_masses_au
+     write(77,'(A)') 'atomic masses in AMU'
+     write(77,'(18D14.4)') atomic_masses
+     write(77,'(A)') 'AMU_TO_AU'
+     write(77,'(D14.4)') AMU_TO_AU
+     write(77,'(A)') 'atomic masses in AU'
+     write(77,'(18D14.4)') atomic_masses_au
+     write(77,'(A)') 'sqrt_atomic_masses_au'
+     write(77,'(18D14.4)') sqrt_atomic_masses_au
+     write(77,'(A)') 'invsqrt_atomic_masses_au'
+     write(77,'(18D14.4)') invsqrt_atomic_masses_au
 !     -------------------------------------------------------------------------
 !
       write(*,'(A)') 'BEGINING HESSIAN CALCULATION'
@@ -898,7 +898,6 @@ contains
           do j=1,3
               k=at_numbers(i)
               at_masses(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
-              at_masses_amu(3*(i-1)+j) = atomic_masses(k)
           end do
       end do
 
@@ -932,7 +931,7 @@ contains
 !           Forward displacement
 !           --------------------
             qmxyz=qmcoords
-            qmxyz(j,i)=qmcoords(j,i)+h!/SQRT(at_masses_amu(k)) 
+            qmxyz(j,i)=qmcoords(j,i)+h*at_masses(k)
             call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
             call dft_get_qm_forces(dxyzqm)
             call dft_get_mm_forces(dxyzcl,dxyzqm)
@@ -947,7 +946,7 @@ contains
 !           Backward displacement
 !           ---------------------
             qmxyz=qmcoords
-            qmxyz(j,i)=qmcoords(j,i)-h!/SQRT(at_masses_amu(k))  
+            qmxyz(j,i)=qmcoords(j,i)-h*at_masses(k)
             call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
             call dft_get_qm_forces(dxyzqm)
             call dft_get_mm_forces(dxyzcl,dxyzqm)
@@ -968,19 +967,18 @@ contains
           do j=i,ncoords
              tmp1=0d0
              if (i==j) then
-                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/h    ! Finite difference.
+                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/h      ! Finite difference.
                 hess(i,j)=at_masses(i)*at_masses(j)*tmp1     ! Mass weighting hessian
              else
                 tmp2=0d0
-                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/h
-                tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/h
+                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/h  
+                tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/h  
                 hess(i,j)=at_masses(i)*at_masses(j)*(tmp1+tmp2)*0.5d0
              end if 
           end do
       end do
 
 !     Projecting out translational and rotaional modes form hessian
-!      call projHessian(hess,qmcoords,at_numbers,3*nqmatoms,nqmatoms,hessp)
       call eckart(hess,qmcoords,at_numbers,3*nqmatoms,nqmatoms,hessp)
 
 !     Write hessian to file
@@ -1006,7 +1004,8 @@ contains
       deallocate( WORK, IWORK, WORK2, IWORK2 )
 
 
-      eig=eig/AMU_TO_AU
+!      eig=eig/AMU_TO_AU
+      eig=eig/sqrt(AMU_TO_AU)
 !     Convert frequecies to wavenumbers
       do i = 1,ncoords
          freq(i) = sign(sign_eig(i),eig(i))*h2cm*sqrt(abs(eig(i)))
@@ -1060,7 +1059,7 @@ contains
       deallocate( WORK, IWORK, WORK2, IWORK2 )
 
 
-      eig=eig/AMU_TO_AU
+      eig=eig/sqrt(AMU_TO_AU)
 !     Convert frequecies to wavenumbers
       do i = 1,ncoords
          freq(i) = sign(sign_eig(i),eig(i))*h2cm*sqrt(abs(eig(i)))
