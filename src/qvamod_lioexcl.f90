@@ -793,12 +793,13 @@ contains
      end subroutine
 
 
-     subroutine hessian(qmcoords,nqmatoms,at_numbers,nmodes,eig)
+     subroutine hessian(qmcoords,nqmatoms,h,at_numbers,nmodes,eig)
 
       implicit none
 
 !     -------------------------------------------------------------------------
       real*8,  intent(in) :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      real*8,  intent(in) :: h                    ! Finite differences displacement factor.
       integer, intent(in) :: nqmatoms             ! Number of QM atoms
       integer, intent(in) :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
       real*8,  intent(out):: nmodes(3*nqmatoms,3*nqmatoms)  ! Hessian eigenvectors
@@ -806,18 +807,20 @@ contains
 !     LOCAL VARIABLES
       integer,parameter   :: nclatoms=0
       integer             :: ncoords              ! 3*nqmatoms
-      integer             :: i,j,k,r,s
+      integer             :: i,j,k,r,s,m
       real*8              :: dxyzcl(3,nclatoms)   ! SCF MM force
       real*8              :: dxyzqm(3,nqmatoms)   ! SCF QM force
-      real*8              :: h                    ! Step for num differentiation.
-      real*8              :: hessf                ! 1/(2*h)
+      real*8              :: hau                  ! h in bohrs
 
       real*8              :: escf                 ! SCF energy
+      real*8              :: tmp1,tmp2            ! Auxiliary variables for hessian calc.
       real*8              :: dipxyz(3)            ! Dipole moment
-      real*8              :: grad(3*nqmatoms+1,3*nqmatoms)
+      real*8              :: grad0(3*nqmatoms)
+      real*8              :: grad(3*nqmatoms,-1:1,3*nqmatoms)
       real*8              :: hess(3*nqmatoms,3*nqmatoms)
       real*8              :: hessp(3*nqmatoms,3*nqmatoms)
       real*8              :: at_masses(3*nqmatoms)
+      real*8              :: at_masses_amu(3*nqmatoms)
       real*8              :: sign_eig(3*nqmatoms)
       real*8              :: freq(3*nqmatoms)
       real*8              :: qmxyz(3,nqmatoms)
@@ -856,6 +859,7 @@ contains
       real*8, PARAMETER :: D1=1.0D00, D2=2.0D00
       real*8, PARAMETER :: PI  =   D2*ACOS(0.0D00)      ! PI
       real*8, PARAMETER :: h2cm=219475.64d0  ! Convert Hartree to cm-1
+      real*8, PARAMETER :: A0  =   0.5291771D00  ! bohr radius in angs. Conv bohr to angs
 
 !     -------------------------------------------------------------------------
 !
@@ -876,8 +880,7 @@ contains
 !     -------------------------------------------------------------------------
 !
       write(*,'(A)') 'BEGINING HESSIAN CALCULATION'
-      h=1D-3                           ! Step for numerical diferentiation.
-      hessf=0.5D0/h                   ! 1/(2*h)
+      hau=h/a0                         ! step for num differentiation in bohrs
       ncoords=3*nqmatoms
 
       dxyzqm=0.0D0
@@ -889,55 +892,90 @@ contains
       sign_eig=1.0D00
       at_masses=0.0D0
 
-      write(*,'(A)') 'BEFORE CALLING LIO'
-!     Calculating energy and gradient at the initial geometry.
-      call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
-      write(*,'(A)') 'AFTER FIRST CALL TO LIO'
-      call dft_get_qm_forces(dxyzqm)
-      write(*,'(A)') 'AFTER SECOND CALL TO LIO'
-      call dft_get_mm_forces(dxyzcl,dxyzqm)
-
-      do i=1,nqmatoms
-          do j=1,3
-              grad(1,3*(i-1)+j)=dxyzqm(j,i)
-          end do
-      end do
-!      write(77,'(99D12.3)') grad(1,:)
-
-!     Calculating gradients in displaced positions along the 
-!     QM coordinates.
-      do i=1,nqmatoms
-          do j=1,3
-              k=3*(i-1)+j+1
-              qmxyz=qmcoords   ! In Angstroms. Transfromed in SCF_in
-              qmxyz(j,i)=qmxyz(j,i)+h
-              call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
-              call dft_get_qm_forces(dxyzqm)
-              call dft_get_mm_forces(dxyzcl,dxyzqm)
-              do r=1,nqmatoms
-               do s=1,3
-                 grad(k,3*(r-1)+s)=dxyzqm(s,r)
-               end do
-              end do
-          end do
-      end do
-      write(*,'(A)') 'JUST COMPUTED ALL GRADIENTS'
-
-
 !     Create a vector of inverse square-root masses corresponding to each 
 !     cartesian coordinate.
       do i=1,nqmatoms
           do j=1,3
               k=at_numbers(i)
               at_masses(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
+              at_masses_amu(3*(i-1)+j) = atomic_masses(k)
           end do
       end do
 
-!     Calculating non diagonal elements of the Hessian    
+!     Calculating energy and gradient at the initial geometry.
+      call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+      call dft_get_qm_forces(dxyzqm)
+      call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+      do i=1,nqmatoms
+          do j=1,3
+              grad0(3*(i-1)+j)=dxyzqm(j,i)
+          end do
+      end do
+
+!     Calculating gradients in displaced positions along the 
+!     QM coordinates.
+
+      do i=1,nqmatoms
+         do j=1,3
+
+            k=3*(i-1)+j
+
+!           NOTE:
+!           qmxyz must be in Angstroms. It will be later transfromed into AU in SCF_in.
+!           The displacement factor h has units of Angs*amu^1/2, so in order to use it 
+!           for simple cartesians in Angs we must divide by sqrt(mi), with mi the mass 
+!           (in amu) of the atom being displaced. 
+!           In this way heavy atoms are less displaced than light atoms, and the numerical
+!           differentiation should be better balanced.
+
+!           Forward displacement
+!           --------------------
+            qmxyz=qmcoords
+            qmxyz(j,i)=qmcoords(j,i)+h!/SQRT(at_masses_amu(k)) 
+            call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
+            call dft_get_qm_forces(dxyzqm)
+            call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+
+            do r=1,nqmatoms
+             do s=1,3
+               grad(k,1,3*(r-1)+s)=dxyzqm(s,r)
+             end do
+            end do
+
+!           Backward displacement
+!           ---------------------
+            qmxyz=qmcoords
+            qmxyz(j,i)=qmcoords(j,i)-h!/SQRT(at_masses_amu(k))  
+            call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
+            call dft_get_qm_forces(dxyzqm)
+            call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+            do r=1,nqmatoms
+             do s=1,3
+               grad(k,-1,3*(r-1)+s)=dxyzqm(s,r)
+             end do
+            end do
+
+         end do
+      end do
+      write(77,'(A)') 'FINISHED ALL GRADIENTS COMPUTATIONS, NOW COMPUTING HESSIAN'
+
+
+!     Calculating elements of the Hessian and mass weighting.
       do i=1,ncoords
           do j=i,ncoords
-              hess(i,j)=grad(i+1,j)-grad(1,j)+grad(j+1,i)-grad(1,i)
-              hess(i,j)=at_masses(i)*at_masses(j)*hessf*hess(i,j)
+             tmp1=0d0
+             if (i==j) then
+                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/h    ! Finite difference.
+                hess(i,j)=at_masses(i)*at_masses(j)*tmp1     ! Mass weighting hessian
+             else
+                tmp2=0d0
+                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/h
+                tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/h
+                hess(i,j)=at_masses(i)*at_masses(j)*(tmp1+tmp2)*0.5d0
+             end if 
           end do
       end do
 

@@ -181,7 +181,7 @@ contains
 !        Decide whether if computing hessian from scratch or reading it.
          if (qumvia_qff < 3) then
 #ifdef qvalio
-            call hessian(qvageom,nqmatoms,at_numbers,nmodes,eig)
+            call hessian(qvageom,nqmatoms,qva_nml%hess_h,at_numbers,nmodes,eig)
 #else
             write(77,'(A)') 'FATAL ERROR: qumvia_qff<3 is only valid '
             write(77,'(A)') 'for QUMVIA_LIO. '

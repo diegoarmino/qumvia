@@ -58,6 +58,7 @@
       real*8  :: selcut1
       real*8  :: selcut2
       real*8  :: qva_dstep
+      real*8  :: hess_h
     end type qva_nml_type
 
     type qva_cli_type
@@ -99,11 +100,12 @@
           real*8  :: selcut1
           real*8  :: selcut2
           real*8  :: qva_dstep
+          real*8  :: hess_h
        
           namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
-          nmorse,nsinh
+          nmorse,nsinh,hess_h
        
           integer :: ifind, ierr
        
@@ -128,6 +130,7 @@
           csiterfactor=10d0
           nmorse=0
           nsinh=0
+          hess_h=1d-3
        
        !  READ NAMELIST
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
@@ -162,6 +165,7 @@
           qva_nml%csiterfactor=csiterfactor
           qva_nml%nmorse=nmorse
           qva_nml%nsinh=nsinh
+          qva_nml%hess_h=hess_h
        
        end subroutine get_qva_nml
  
@@ -193,6 +197,7 @@
           write(77,'(A,F7.0)') '  resthresh = ',qva_nml%resthresh
           write(77,'(A,D10.3)') '  selcut1 = ',qva_nml%selcut1
           write(77,'(A,D10.3)') '  selcut2 = ',qva_nml%selcut2
+          write(77,'(A,D10.3)') '  hess_h = ',qva_nml%hess_h
           write(77,'(A)') ' -------------------------- '
           write(77,*) 
  
