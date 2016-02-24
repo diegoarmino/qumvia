@@ -867,16 +867,16 @@ contains
 !     -------------------------------------------------------------------------
 !     DEBUG
 !     -------------------------------------------------------------------------
-     write(77,'(A)') 'atomic masses in AMU'
-     write(77,'(18D14.4)') atomic_masses
-     write(77,'(A)') 'AMU_TO_AU'
-     write(77,'(D14.4)') AMU_TO_AU
-     write(77,'(A)') 'atomic masses in AU'
-     write(77,'(18D14.4)') atomic_masses_au
-     write(77,'(A)') 'sqrt_atomic_masses_au'
-     write(77,'(18D14.4)') sqrt_atomic_masses_au
-     write(77,'(A)') 'invsqrt_atomic_masses_au'
-     write(77,'(18D14.4)') invsqrt_atomic_masses_au
+!     write(77,'(A)') 'atomic masses in AMU'
+!     write(77,'(18D14.4)') atomic_masses
+!     write(77,'(A)') 'AMU_TO_AU'
+!     write(77,'(D14.4)') AMU_TO_AU
+!     write(77,'(A)') 'atomic masses in AU'
+!     write(77,'(18D14.4)') atomic_masses_au
+!     write(77,'(A)') 'sqrt_atomic_masses_au'
+!     write(77,'(18D14.4)') sqrt_atomic_masses_au
+!     write(77,'(A)') 'invsqrt_atomic_masses_au'
+!     write(77,'(18D14.4)') invsqrt_atomic_masses_au
 !     -------------------------------------------------------------------------
 !
       write(*,'(A)') 'BEGINING HESSIAN CALCULATION'
@@ -895,10 +895,10 @@ contains
 !     Create a vector of inverse square-root masses corresponding to each 
 !     cartesian coordinate.
       do i=1,nqmatoms
-          do j=1,3
-              k=at_numbers(i)
-              at_masses(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
-          end do
+         do j=1,3
+            k=at_numbers(i)
+            at_masses(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
+         end do
       end do
 
 !     Calculating energy and gradient at the initial geometry.
@@ -907,9 +907,9 @@ contains
       call dft_get_mm_forces(dxyzcl,dxyzqm)
 
       do i=1,nqmatoms
-          do j=1,3
-              grad0(3*(i-1)+j)=dxyzqm(j,i)
-          end do
+         do j=1,3
+            grad0(3*(i-1)+j)=dxyzqm(j,i)
+         end do
       end do
 
 !     Calculating gradients in displaced positions along the 
@@ -924,9 +924,8 @@ contains
 !           qmxyz must be in Angstroms. It will be later transfromed into AU in SCF_in.
 !           The displacement factor h has units of Angs*amu^1/2, so in order to use it 
 !           for simple cartesians in Angs we must divide by sqrt(mi), with mi the mass 
-!           (in amu) of the atom being displaced. 
-!           In this way heavy atoms are less displaced than light atoms, and the numerical
-!           differentiation should be better balanced.
+!           of the atom being displaced. In this way heavy atoms are less displaced than 
+!           light atoms, and the numerical differentiation should be better balanced.
 
 !           Forward displacement
 !           --------------------
