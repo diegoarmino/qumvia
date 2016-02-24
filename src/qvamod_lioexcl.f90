@@ -613,8 +613,11 @@ contains
      do i=1,nqmatoms
          do j=1,3
              k=at_numbers(i)
-             Mass(3*(i-1)+j) = sqrt_atomic_masses_au(k)
-             cmass(j)=cmass(j)+atomic_masses_au(k)*X0(j,i)
+             Mass(3*(i-1)+j) = SQRT(isomass((k-1)*4+1))
+             cmass(j)=cmass(j)+isomass((k-1)*4+1)*X0(j,i)
+!             version with atomic masses in AU
+!             Mass(3*(i-1)+j) = sqrt_atomic_masses_au(k)
+!             cmass(j)=cmass(j)+atomic_masses_au(k)*X0(j,i)
          end do
          totM=totM+atomic_masses_au(k)
      end do
@@ -814,13 +817,13 @@ contains
 
       real*8              :: escf                 ! SCF energy
       real*8              :: tmp1,tmp2            ! Auxiliary variables for hessian calc.
+      real*8              :: hhi,hhj
       real*8              :: dipxyz(3)            ! Dipole moment
       real*8              :: grad0(3*nqmatoms)
       real*8              :: grad(3*nqmatoms,-1:1,3*nqmatoms)
       real*8              :: hess(3*nqmatoms,3*nqmatoms)
       real*8              :: hessp(3*nqmatoms,3*nqmatoms)
       real*8              :: at_masses(3*nqmatoms)
-      real*8              :: at_masses_amu(3*nqmatoms)
       real*8              :: sign_eig(3*nqmatoms)
       real*8              :: freq(3*nqmatoms)
       real*8              :: qmxyz(3,nqmatoms)
@@ -836,47 +839,10 @@ contains
       integer :: LWORK, LIWORK, INFO
 
 !     PARAMETERS
-!     -----------------------------------------------------------------------------------
-!     The following array contains all atomic masses ordered by atomic number, 
-!     so that atomic_masses(<atomic_number>) -where <atomic_number> may be 1 to 18-
-!     returns the atomic mass corresponding to <atomic_number>. 
-!     All masses correspond to the most abundant isotope and are in Daltons. Atomic 
-!     masses for H, He, and O are obtanied from  Mohr, Taylor, Newell, Rev. Mod. Phys. 
-!     80 (2008) 633-730. The rest are extracted from NIST: 
-!     http://physics.nist.gov/cgi-bin/Compositions/stand_alone.pl. 
-!     -----------------------------------------------------------------------------------
-      real*8, PARAMETER :: EMASS_CODATA08 = 0.0005485799111D0 ! Electron mass in Daltons (me * Na). The mass of 1 mol of electrons.
-      real*8, PARAMETER :: AMU_TO_AU = 1.0d0/EMASS_CODATA08   ! Conversion factor Da to AU
-      real*8, PARAMETER :: atomic_masses(18) =&
-          (/  1.00866491574D0, 4.002603254153D0,  7.016004D0,  9.012182D0, 11.009305D0, &
-             12.0D0,          14.0030740048D0,   15.99491461956D0, 18.998403D0,         &
-             19.992440D0,     22.989770D0,       23.985042D0,      26.981538D0,         &
-             27.976927D0,     30.973762D0,       31.972071D0,      34.968853D0,         &
-             39.962383D0 /)
-      real*8, PARAMETER :: atomic_masses_au(18) = atomic_masses * AMU_TO_AU
-      real*8, PARAMETER :: sqrt_atomic_masses_au(18) = SQRT(atomic_masses_au)
-      real*8, PARAMETER :: invsqrt_atomic_masses_au(18) = 1.0d0/SQRT(atomic_masses_au)
-      real*8, PARAMETER :: D1=1.0D00, D2=2.0D00
-      real*8, PARAMETER :: PI  =   D2*ACOS(0.0D00)      ! PI
       real*8, PARAMETER :: h2cm=219475.64d0  ! Convert hartee/bohr^2/emu to cm-1
-      real*8, PARAMETER :: A0  =   0.5291771D00  ! bohr radius in angs. Conv bohr to angs
+      real*8, PARAMETER :: freq2cm=5141.1182009496200901D0 ! Convert freq to cm-1
 
-!     -------------------------------------------------------------------------
-!
-!
-!     -------------------------------------------------------------------------
-!     DEBUG
-!     -------------------------------------------------------------------------
-!     write(77,'(A)') 'atomic masses in AMU'
-!     write(77,'(18D14.4)') atomic_masses
-!     write(77,'(A)') 'AMU_TO_AU'
-!     write(77,'(D14.4)') AMU_TO_AU
-!     write(77,'(A)') 'atomic masses in AU'
-!     write(77,'(18D14.4)') atomic_masses_au
-!     write(77,'(A)') 'sqrt_atomic_masses_au'
-!     write(77,'(18D14.4)') sqrt_atomic_masses_au
-!     write(77,'(A)') 'invsqrt_atomic_masses_au'
-!     write(77,'(18D14.4)') invsqrt_atomic_masses_au
+      include "qvmbia_param.f"
 !     -------------------------------------------------------------------------
 !
       write(*,'(A)') 'BEGINING HESSIAN CALCULATION'
@@ -897,7 +863,7 @@ contains
       do i=1,nqmatoms
          do j=1,3
             k=at_numbers(i)
-            at_masses(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
+            at_masses(3*(i-1)+j) = isomass((k-1)*4+1)
          end do
       end do
 
@@ -930,7 +896,7 @@ contains
 !           Forward displacement
 !           --------------------
             qmxyz=qmcoords
-            qmxyz(j,i)=qmcoords(j,i)+h*at_masses(k)
+            qmxyz(j,i)=qmcoords(j,i)+h/sqrt(at_masses(k))
             call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
             call dft_get_qm_forces(dxyzqm)
             call dft_get_mm_forces(dxyzcl,dxyzqm)
@@ -945,7 +911,7 @@ contains
 !           Backward displacement
 !           ---------------------
             qmxyz=qmcoords
-            qmxyz(j,i)=qmcoords(j,i)-h*at_masses(k)
+            qmxyz(j,i)=qmcoords(j,i)-h/sqrt(at_masses(k))
             call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
             call dft_get_qm_forces(dxyzqm)
             call dft_get_mm_forces(dxyzcl,dxyzqm)
@@ -965,14 +931,16 @@ contains
       do i=1,ncoords
           do j=i,ncoords
              tmp1=0d0
+             tmp2=0d0
+             hhi=hau/sqrt(at_masses(i))
+             hhj=hau/sqrt(at_masses(j))
              if (i==j) then
-                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/h      ! Finite difference.
-                hess(i,j)=at_masses(i)*at_masses(j)*tmp1     ! Mass weighting hessian
+                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi    ! Finite difference.
+                hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
              else
-                tmp2=0d0
-                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/h  
-                tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/h  
-                hess(i,j)=at_masses(i)*at_masses(j)*(tmp1+tmp2)*0.5d0
+                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi
+                tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/hhj
+                hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
              end if 
           end do
       end do
@@ -988,7 +956,7 @@ contains
 !      end do
 
 !     Scaling hessian to avoid numerical problems.
-      hess=hess*1.0D03
+      hess=hess*1000d0
 
 
 !     DIAGONALIZATION OF THE HESSIAN
@@ -1003,11 +971,12 @@ contains
       deallocate( WORK, IWORK, WORK2, IWORK2 )
 
 
-!      eig=eig/AMU_TO_AU
-      eig=eig/sqrt(AMU_TO_AU)
+!     Descaling eigenvalues.
+      eig=eig/1000d0
+
 !     Convert frequecies to wavenumbers
       do i = 1,ncoords
-         freq(i) = sign(sign_eig(i),eig(i))*h2cm*sqrt(abs(eig(i)))
+         freq(i) = sign(sign_eig(i),eig(i))*freq2cm*sqrt(abs(eig(i)))
       ENDDO
 
 !     Fix the phase of the eigenvectors
@@ -1043,8 +1012,7 @@ contains
       hess = hessp
 
 !     Scaling hessian to avoid numerical problems.
-      hess=hess*1.0D03
-
+      hess=hess*1000D0
 
 !     DIAGONALIZATION OF THE HESSIAN
       allocate ( work(1000), IWORK(1000) )
@@ -1057,11 +1025,12 @@ contains
       call dsyevd('V','U',ncoords,hess,ncoords,eig,WORK2,LWORK,IWORK2,LIWORK,INFO)
       deallocate( WORK, IWORK, WORK2, IWORK2 )
 
+!     Descaling eigenvalues.
+      eig=eig/1000d0
 
-      eig=eig/sqrt(AMU_TO_AU)
 !     Convert frequecies to wavenumbers
       do i = 1,ncoords
-         freq(i) = sign(sign_eig(i),eig(i))*h2cm*sqrt(abs(eig(i)))
+         freq(i) = sign(sign_eig(i),eig(i))*freq2cm*sqrt(abs(eig(i)))
       ENDDO
 
 !     Fix the phase of the eigenvectors
@@ -1094,6 +1063,8 @@ contains
       end do
 
       nmodes=hess
+!     Converting eigenvectors form Hartree/bohr^2/amu to Hartree/bohr^2/emu
+      eig=eig/AMU_TO_AU
 
       return
       end subroutine

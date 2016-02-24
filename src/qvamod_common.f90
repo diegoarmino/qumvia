@@ -130,7 +130,7 @@
           csiterfactor=10d0
           nmorse=0
           nsinh=0
-          hess_h=1d-3
+          hess_h=2d-2
        
        !  READ NAMELIST
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
