@@ -796,13 +796,14 @@ contains
      end subroutine
 
 
-     subroutine hessian(qmcoords,nqmatoms,h,at_numbers,nmodes,eig)
+     subroutine hessian(qmcoords,nqmatoms,h,hess_norder,at_numbers,nmodes,eig)
 
       implicit none
 
 !     -------------------------------------------------------------------------
       real*8,  intent(in) :: qmcoords(3,nqmatoms) ! QM atom coordinates
       real*8,  intent(in) :: h                    ! Finite differences displacement factor.
+      integer, intent(in) :: hess_norder          ! Finite differences displacement factor.
       integer, intent(in) :: nqmatoms             ! Number of QM atoms
       integer, intent(in) :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
       real*8,  intent(out):: nmodes(3*nqmatoms,3*nqmatoms)  ! Hessian eigenvectors
@@ -820,7 +821,6 @@ contains
       real*8              :: hhi,hhj
       real*8              :: dipxyz(3)            ! Dipole moment
       real*8              :: grad0(3*nqmatoms)
-      real*8              :: grad(3*nqmatoms,-1:1,3*nqmatoms)
       real*8              :: hess(3*nqmatoms,3*nqmatoms)
       real*8              :: hessp(3*nqmatoms,3*nqmatoms)
       real*8              :: at_masses(3*nqmatoms)
@@ -834,8 +834,9 @@ contains
 !     Workspace for diagonalization. 
       character(len=117) :: format1
       character(len=117) :: format2
-      real*8,  dimension(:), allocatable :: WORK, WORK2
-      integer, dimension(:), allocatable :: IWORK, IWORK2
+      real*8,  dimension(:), allocatable    :: WORK, WORK2
+      real*8,  dimension(:,:,:),allocatable :: grad
+      integer, dimension(:), allocatable    :: IWORK, IWORK2
       integer :: LWORK, LIWORK, INFO
 
 !     PARAMETERS
@@ -845,13 +846,11 @@ contains
       include "qvmbia_param.f"
 !     -------------------------------------------------------------------------
 !
-      write(*,'(A)') 'BEGINING HESSIAN CALCULATION'
       hau=h/a0                         ! step for num differentiation in bohrs
       ncoords=3*nqmatoms
 
       dxyzqm=0.0D0
       dxyzcl=0.0D0
-      grad=0.0D0
       hess=0.0D0
       eig=0.0D0
       freq=0.0D0
@@ -866,6 +865,13 @@ contains
             at_masses(3*(i-1)+j) = isomass((k-1)*4+1)
          end do
       end do
+
+      if (hess_norder==1) then
+         allocate (grad(3*nqmatoms,-1:1,3*nqmatoms))
+      else
+         allocate (grad(3*nqmatoms,-2:2,3*nqmatoms))
+      end if
+      grad=0.0D0
 
 !     Calculating energy and gradient at the initial geometry.
       call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
@@ -922,30 +928,83 @@ contains
              end do
             end do
 
+            if (hess_norder==2) then
+
+!              Forward 2x displacement
+!              -----------------------
+               qmxyz=qmcoords
+               qmxyz(j,i)=qmcoords(j,i)+2d0*h/sqrt(at_masses(k))
+               call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
+               call dft_get_qm_forces(dxyzqm)
+               call dft_get_mm_forces(dxyzcl,dxyzqm)
+               do r=1,nqmatoms
+                do s=1,3
+                  grad(k,2,3*(r-1)+s)=dxyzqm(s,r)
+                end do
+               end do
+
+!              Backward 2x displacement
+!              ------------------------
+               qmxyz=qmcoords
+               qmxyz(j,i)=qmcoords(j,i)-2d0*h/sqrt(at_masses(k))
+               call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
+               call dft_get_qm_forces(dxyzqm)
+               call dft_get_mm_forces(dxyzcl,dxyzqm)
+               do r=1,nqmatoms
+                do s=1,3
+                  grad(k,-2,3*(r-1)+s)=dxyzqm(s,r)
+                end do
+               end do
+
+            end if
+
          end do
       end do
       write(77,'(A)') 'FINISHED ALL GRADIENTS COMPUTATIONS, NOW COMPUTING HESSIAN'
 
 
 !     Calculating elements of the Hessian and mass weighting.
-      do i=1,ncoords
-          do j=i,ncoords
-             tmp1=0d0
-             tmp2=0d0
-             hhi=hau/sqrt(at_masses(i))
-             hhj=hau/sqrt(at_masses(j))
-             if (i==j) then
-                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi    ! Finite difference.
-                hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
-             else
-                tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi
-                tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/hhj
-                hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
-             end if 
-          end do
-      end do
+      IF (hess_norder==1) THEN
 
-!     Projecting out translational and rotaional modes form hessian
+         do i=1,ncoords
+             do j=i,ncoords
+                tmp1=0d0
+                tmp2=0d0
+                hhi=hau/sqrt(at_masses(i))
+                hhj=hau/sqrt(at_masses(j))
+                if (i==j) then
+                   tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi    ! Finite difference.
+                   hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
+                else
+                   tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi
+                   tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/hhj
+                   hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
+                end if 
+             end do
+         end do
+
+      ELSE
+
+         do i=1,ncoords
+             do j=i,ncoords
+                tmp1=0d0
+                tmp2=0d0
+                hhi=hau/sqrt(at_masses(i))
+                hhj=hau/sqrt(at_masses(j))
+                if (i==j) then
+                   tmp1=(grad(i,-2,j)+8d0*grad(i,1,j)-8d0*grad(i,-1,j)-grad(i,2,j))/(12d0*hhi)    ! Finite difference.
+                   hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
+                else
+                   tmp1=(grad(i,-2,j)+8d0*grad(i,1,j)-8d0*grad(i,-1,j)-grad(i,2,j))/(12d0*hhi)    ! Finite difference.
+                   tmp2=(grad(j,-2,i)+8d0*grad(j,1,i)-8d0*grad(j,-1,i)-grad(j,2,i))/(12d0*hhj)    ! Finite difference.
+                   hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
+                end if 
+             end do
+         end do
+
+      END IF
+
+!     Projecting out translational and rotaional modes from hessian (Eckart conditions).
       call eckart(hess,qmcoords,at_numbers,3*nqmatoms,nqmatoms,hessp)
 
 !     Write hessian to file
@@ -986,28 +1045,13 @@ contains
       format1="(9999F9.2)"
       format2="(9999D11.3)"
 !     Write eigenvector and eigenvalues to file
-      write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
-      write(77,*) '     HESSIAN DIAGONALIZATION WITHOUT ECKART CONDITIONS'
-      write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
       write(77,*) 
+      write(77,*) '     VIBRATIONAL FREQUENCIES WITHOUT ECKART CONDITIONS'
+      write(77,*) '     -------------------------------------------------'
       write(77,*) 
-      write(77,*) '     CONVERSION FACTOR        '
-      write(77,*) '     --------------------     '
-      write(77,format2) h2cm
-      write(77,*) '     EIGENVALUES AU           '
-      write(77,*) '     --------------------     '
-      write(77,format2) eig
-      write(77,*) '     FREQUENCIES CM-1         '
-      write(77,*) '     --------------------     '
       write(77,format1) freq
-      write(77,*) '     WRITING EIGENVECTORS     '
-      write(77,*) '     --------------------     '
-      write(77,*)
-      do k=1,nqmatoms
-         r=3*(k-1)+1
-         s=r+2
-         write(77,format1)  (hess(r:s,j),j=7,ncoords)
-      end do
+      write(77,*) 
+      write(77,*) 
 
       hess = hessp
 
@@ -1044,22 +1088,26 @@ contains
       write(77,*) '     VIBRATIONAL RESULTS WITH ECKART CONDITIONS'
       write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
       write(77,*) 
-      write(77,*) '     CONVERSION FACTOR        '
-      write(77,*) '     --------------------     '
-      write(77,format2) h2cm
-      write(77,*) '     EIGENVALUES AU           '
-      write(77,*) '     --------------------     '
-      write(77,format2) eig
-      write(77,*) '     FREQUENCIES CM-1         '
-      write(77,*) '     --------------------     '
+      write(77,*) ' LIST OF FREQUENCIES (CM-1)'
       write(77,format1) freq
-      write(77,*) '     WRITING EIGENVECTORS     '
-      write(77,*) '     --------------------     '
       write(77,*)
-      do k=1,nqmatoms
-         r=3*(k-1)+1
-         s=r+2
-         write(77,format1)  (hess(r:s,j),j=7,ncoords)
+      write(77,*)             '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*)             '           WRITING NORMAL MODES            '
+      write(77,*)             '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*)
+      do j=7,ncoords
+         write(77,'(A,i3)')   'MODE =',j-6
+         write(77,'(A,F9.2)') 'FREQUENCY (CM-1) =',freq(j)
+         write(77,'(A)')      '-------------------------------------------'
+         write(77,'(A)')      ' AT       X            Y            Z      '
+         write(77,'(A)')      '-------------------------------------------'
+         do k=1,nqmatoms
+            r=3*(k-1)+1
+            s=r+2
+            write(77,'(i3,3F13.8)')  k, hess(r:s,j)
+         end do
+         write(77,*)
+         write(77,*)
       end do
 
       nmodes=hess

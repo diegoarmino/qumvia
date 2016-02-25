@@ -52,6 +52,7 @@
       integer :: csdepth
       integer :: nmorse
       integer :: nsinh
+      integer :: hess_norder
       real*8  :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
@@ -94,6 +95,7 @@
           integer :: csdepth
           integer :: nmorse
           integer :: nsinh
+          integer :: hess_norder
           real*8  :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
@@ -105,7 +107,7 @@
           namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
-          nmorse,nsinh,hess_h
+          nmorse,nsinh,hess_h,hess_norder
        
           integer :: ifind, ierr
        
@@ -131,6 +133,7 @@
           nmorse=0
           nsinh=0
           hess_h=2d-2
+          hess_norder=1
        
        !  READ NAMELIST
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
@@ -166,6 +169,7 @@
           qva_nml%nmorse=nmorse
           qva_nml%nsinh=nsinh
           qva_nml%hess_h=hess_h
+          qva_nml%hess_norder=hess_norder
        
        end subroutine get_qva_nml
  
@@ -191,6 +195,7 @@
           write(77,'(A,I3)') '  csdepth = ',qva_nml%csdepth
           write(77,'(A,I3)') '  nmorse = ',qva_nml%nmorse
           write(77,'(A,I3)') '  nsinh = ',qva_nml%nsinh
+          write(77,'(A,I3)') '  hess_norder = ',qva_nml%hess_norder
           write(77,'(A,F7.2)') '  csiterfactor = ',qva_nml%csiterfactor
           write(77,'(A,F7.3)') '  vscf_gauswidth = ',qva_nml%vscf_gauswidth
           write(77,'(A,F7.0)') '  ethresh = ',qva_nml%ethresh
