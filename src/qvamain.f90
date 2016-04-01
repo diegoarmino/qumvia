@@ -51,18 +51,21 @@ program qumvia_main
    use qvamod_lio
    use qvamod_lioexcl
 #endif
+   use qva_global_module
    use qvamod_common
    use M_kracken
 
    implicit none
 
-   integer   :: nqmatoms,ierr
+   integer   :: ierr
    type(qva_cli_type), save  :: qva_cli
    type(qva_nml_type), save  :: qva_nml
+   integer, allocatable      :: atnum_qm(:)
+   real*8, allocatable       :: qvageom(:,:)
+   integer   :: nqmatoms
+
 #ifdef qvalio
    integer   :: nclatoms
-   integer, allocatable :: at_numbers(:)
-   real*8, allocatable :: qvageom(:,:)
    type(lio_nml_type), save  :: lio_nml
 #endif
 
@@ -114,14 +117,14 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
    call get_qva_nml(qva_cli%inp,qva_nml)
    call print_qva_nml(qva_nml)
    call readnqmatoms(qva_cli%geo,nqmatoms)
-#ifdef qvalio
 !  Read geometry file.
-   allocate(at_numbers(nqmatoms),qvageom(3,nqmatoms))
-   call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
+   allocate(atnum_qm(nqmatoms),qvageom(3,nqmatoms))
+   call readgeom(qva_cli,nqmatoms,qvageom,atnum_qm)
+#ifdef qvalio
    call get_lio_nml(qva_cli%inp,lio_nml)
    call print_lio_nml(lio_nml)
 
-   call init_lio_amber(nqmatoms,at_numbers,nclatoms, &
+   call init_lio_amber(nqmatoms,atnum_qm,nclatoms, &
       lio_nml%qmcharge, lio_nml%basis, lio_nml%output, lio_nml%fcoord, &
       lio_nml%fmulliken, lio_nml%frestart, lio_nml%frestartin, &
       lio_nml%verbose, lio_nml%OPEN, lio_nml%NMAX, lio_nml%NUNP, &
@@ -133,14 +136,12 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
       lio_nml%field, lio_nml%exter, lio_nml%a0, lio_nml%epsilon, &
       lio_nml%Fx, lio_nml%Fy, lio_nml%Fz, lio_nml%NBCH, &
       lio_nml%propagator, lio_nml%writedens, lio_nml%tdrestart)
-   deallocate(at_numbers,qvageom)
 #endif
-!   close(unit=10)
 
    IF (qva_nml%nhess .eq. 1) THEN
 
 !     STATE-SPECIFIC VSCF / CONFIGURATION SELECTION VCI           
-      call run_vscfvci(qva_cli,qva_nml,nqmatoms)
+      call run_vscfvci(qva_cli,qva_nml,nqmatoms,qvageom,atnum_qm)
 #ifdef qvalio
       call lio_finalize()
 #endif

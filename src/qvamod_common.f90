@@ -29,48 +29,54 @@
 !
 ! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  
 ! ----------------------------------------------------------------
+    use qva_global_module
  
     implicit none
     private
-    public :: geoms4qff,get_qva_nml,readnqmatoms,qva_nml_type, &
+    public :: geoms4qff,get_qva_nml,readnqmatoms, &
            &  readgeom, readgaunmodes, readqff, readgamessqff, &
            &  hseminumqff, readaddref, genconf3, print_qva_nml,&
-           &  ssvscf2, csVCI2,qva_cli_type,convertQFF
- 
-    type qva_nml_type
-      integer :: nhess
-      real*8  :: vscf_gauswidth
-      integer :: vci_qmax1
-      integer :: vci_qmax2
-      integer :: vci_qmax3
-      integer :: vci_qmax4
-      integer :: qva_naddref
-      integer :: qumvia_qff
-      integer :: qumvia_nmc
-      integer :: qva_extprog
-      integer :: doconfsel
-      integer :: csdepth
-      integer :: nmorse
-      integer :: nsinh
-      integer :: hess_norder
-      real*8  :: csiterfactor
-      real*8  :: ethresh
-      real*8  :: resthresh
-      real*8  :: selcut1
-      real*8  :: selcut2
-      real*8  :: qva_dstep
-      real*8  :: hess_h
-    end type qva_nml_type
+           &  ssvscf2, csVCI2,convertQFF
 
-    type qva_cli_type
-       character(99) :: inp
-       character(99) :: out
-       character(99) :: geo
-       character(99) :: nmo
-       character(99) :: hes
-       character(99) :: qff
-       character(99) :: ste
-    end type qva_cli_type
+!   public :: geoms4qff,get_qva_nml,readnqmatoms,qva_nml_type, &
+!          &  readgeom, readgaunmodes, readqff, readgamessqff, &
+!          &  hseminumqff, readaddref, genconf3, print_qva_nml,&
+!          &  ssvscf2, csVCI2,qva_cli_type,convertQFF
+ 
+!   type qva_nml_type
+!     integer :: nhess
+!     real*8  :: vscf_gauswidth
+!     integer :: vci_qmax1
+!     integer :: vci_qmax2
+!     integer :: vci_qmax3
+!     integer :: vci_qmax4
+!     integer :: qva_naddref
+!     integer :: qumvia_qff
+!     integer :: qumvia_nmc
+!     integer :: qva_extprog
+!     integer :: doconfsel
+!     integer :: csdepth
+!     integer :: nmorse
+!     integer :: nsinh
+!     integer :: hess_norder
+!     real*8  :: csiterfactor
+!     real*8  :: ethresh
+!     real*8  :: resthresh
+!     real*8  :: selcut1
+!     real*8  :: selcut2
+!     real*8  :: qva_dstep
+!     real*8  :: hess_h
+!   end type qva_nml_type
+
+!   type qva_cli_type
+!      character(99) :: inp
+!      character(99) :: out
+!      character(99) :: geo
+!      character(99) :: nmo
+!      character(99) :: hes
+!      character(99) :: qff
+!      character(99) :: ste
+!   end type qva_cli_type
 
  
  contains

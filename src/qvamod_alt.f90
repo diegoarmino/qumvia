@@ -4,6 +4,7 @@ module qvamod_cpu
 module qvamod_lio
 #endif
 
+   use qva_global_module
    use qvamod_common
 
 #ifdef qvalio
@@ -43,21 +44,22 @@ module qvamod_lio
 
    implicit none
    private
-   public :: run_vscfvci,selectqff,ssvscf_csvci2
+   public :: run_vscfvci,selectqff,ssvscf_csvci2,run_vscfvci2
 
 
 contains
 
-      subroutine run_vscfvci(qva_cli,qva_nml,nqmatoms)
+      subroutine run_vscfvci(qva_cli,qva_nml,nqmatoms,qvageom,at_numbers)
          implicit none
 !        -----------------------------------------------------------
          type(qva_cli_type), intent(in) :: qva_cli
          type(qva_nml_type), intent(in) :: qva_nml
+         real*8 ,intent(in)             :: qvageom(3,nqmatoms)
+         integer ,intent(in)            :: at_numbers(nqmatoms)
          integer,intent(in) :: nqmatoms
 
 !        LOCAL VARIABLES
          integer :: i
-         integer :: at_numbers(nqmatoms)
          integer :: nmcoup
          integer :: ndf
          integer :: nvdf
@@ -84,7 +86,6 @@ contains
          real*8 :: escf
          real*8 :: clcoords(4,nclatoms)
          real*8 :: Evscf
-         real*8 :: qvageom(3,nqmatoms)
          real*8 :: Evirt1(3*nqmatoms-6)
          real*8 :: eig(3*nqmatoms)
          real*8 :: nmodes(3*nqmatoms,3*nqmatoms)
@@ -118,9 +119,6 @@ contains
          real*8,allocatable :: ECI(:)
          real*8,allocatable :: Cci(:,:)
 !        -----------------------------------------------------------
-
-!        Read geometry file.
-         call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
 
 !        Some aliases
          qumvia_qff = qva_nml%qumvia_qff
@@ -240,6 +238,197 @@ contains
       end subroutine
 
 
+      subroutine run_vscfvci2(qva_cli,qva_nml,nqmatoms,nclatoms,clcoords,qvageom,at_numbers,atnum_qmmm)
+         implicit none
+!        -----------------------------------------------------------
+         type(qva_cli_type), intent(in) :: qva_cli
+         type(qva_nml_type), intent(in) :: qva_nml
+         real*8 ,intent(in)             :: qvageom(3,nqmatoms)
+         real*8 ,intent(in)             :: clcoords(4,nqmatoms)
+         integer ,intent(in)            :: at_numbers(nqmatoms)
+         integer ,intent(in)            :: atnum_qmmm(nqmatoms+nclatoms)
+         integer,intent(in) :: nqmatoms,nclatoms
+
+!        LOCAL VARIABLES
+         integer :: i
+         integer :: nmcoup
+         integer :: ndf
+         integer :: nvdf
+         integer :: ngaus
+         integer :: nconf
+         integer :: qmaxx1
+         integer :: qmaxx2
+         integer :: qmaxx3
+         integer :: qmaxx4
+         integer :: bdim
+         integer :: nrst
+         integer :: qumvia_qff
+         integer :: qumvia_nmc
+         integer :: qva_extprog
+         integer :: naddref
+!         integer,parameter :: nclatoms = 0
+
+         real*8 :: dy
+         real*8 :: ethresh
+         real*8 :: resthresh
+         real*8 :: selcut1
+         real*8 :: selcut2
+         real*8 :: gwidth
+         real*8 :: escf
+!         real*8 :: clcoords(4,nclatoms)
+         real*8 :: Evscf
+         real*8 :: Evirt1(3*nqmatoms-6)
+         real*8 :: eig(3*nqmatoms)
+         real*8 :: nmodes(3*nqmatoms,3*nqmatoms)
+         real*8 :: atmass(nqmatoms)
+         real*8 :: L(3*nqmatoms,3*nqmatoms-6)
+         real*8 :: freq(3*nqmatoms-6)
+   
+!        LOCAL ALLOCATABLE VARIABLES
+         real*8,allocatable :: Emod(:,:)
+         real*8,allocatable :: P(:,:,:)
+         real*8,allocatable :: Po(:,:,:)
+         real*8,allocatable :: Scho(:,:,:)
+         real*8,allocatable :: Q1(:,:,:)
+         real*8,allocatable :: Q2(:,:,:)
+         real*8,allocatable :: Q3(:,:,:)
+         real*8,allocatable :: Hcore(:,:,:)
+         real*8,allocatable :: GDmtrx(:,:,:)
+         real*8,allocatable :: GTmtrx(:,:,:)
+         real*8,allocatable :: hii(:)
+         real*8,allocatable :: tiii(:)
+         real*8,allocatable :: uiiii(:)
+         real*8,allocatable :: tiij(:,:)
+         real*8,allocatable :: tjji(:,:)
+         real*8,allocatable :: uiiij(:,:)
+         real*8,allocatable :: ujjji(:,:)
+         real*8,allocatable :: uiijj(:,:)
+         real*8,allocatable :: tijk(:,:,:)
+         real*8,allocatable :: uiijk(:,:,:)
+         real*8,allocatable :: uijjk(:,:,:)
+         real*8,allocatable :: uijkk(:,:,:)
+         real*8,allocatable :: ECI(:)
+         real*8,allocatable :: Cci(:,:)
+!        -----------------------------------------------------------
+
+!        Some aliases
+         qumvia_qff = qva_nml%qumvia_qff
+         qumvia_nmc = qva_nml%qumvia_nmc
+         qva_extprog = qva_nml%qva_extprog
+         dy=qva_nml%qva_dstep
+         gwidth=qva_nml%vscf_gauswidth
+
+         ngaus=16
+         ndf=3*nqmatoms
+         nvdf=ndf-6
+
+         allocate ( &
+            P(ngaus,ngaus,nvdf),     &
+            Po(ngaus,ngaus,nvdf),    &
+            Scho(ngaus,ngaus,nvdf),  &
+            Q1(ngaus,ngaus,nvdf),    &
+            Q2(ngaus,ngaus,nvdf),    &
+            Q3(ngaus,ngaus,nvdf),    &
+            Hcore(ngaus,ngaus,nvdf), &
+            hii(nvdf),               &
+            tiii(nvdf),              &
+            uiiii(nvdf),             &
+            tiij(nvdf,nvdf),         &
+            tjji(nvdf,nvdf),         &
+            uiiij(nvdf,nvdf),        &
+            ujjji(nvdf,nvdf),        &
+            tijk(nvdf,nvdf,nvdf),    &
+            uiijk(nvdf,nvdf,nvdf),   &
+            uijjk(nvdf,nvdf,nvdf),   &
+            uijkk(nvdf,nvdf,nvdf),   &
+            uiijj(nvdf,nvdf)         &
+         )
+   
+         P=0.0d0
+         Po=0.0d0
+         Evscf=0.0d0
+         Evirt1=0.0d0
+         Q1=0.0d0
+         Q2=0.0d0
+         Q3=0.0d0
+         Hcore=0.0d0
+         hii=0.0d0
+         tiii=0.0d0
+         uiiii=0.0d0
+         tiij=0.0d0
+         tjji=0.0d0
+         uiiij=0.0d0
+         ujjji=0.0d0
+         uiijj=0.0d0
+         tijk=0.0d0
+         uiijk=0.0d0
+         uijjk=0.0d0
+         uijkk=0.0d0
+         ECI=0.0d0
+         Cci=0.0d0
+   
+!        Decide whether if computing hessian from scratch or reading it.
+         if (qumvia_qff < 3) then
+#ifdef qvalio
+!            call hessian(qvageom,nqmatoms,qva_nml%hess_h,qva_nml%hess_norder,&
+!                       & at_numbers,nmodes,eig)
+            call hessian2(qva_nml,qvageom,clcoords,nqmatoms,nclatoms,qva_nml%hess_h,&
+                       & qva_nml%hess_norder,at_numbers,nmodes,eig,atnum_qmmm)
+#else
+            write(77,'(A)') 'FATAL ERROR: qumvia_qff<3 is only valid '
+            write(77,'(A)') 'for QUMVIA_LIO. '
+            STOP
+#endif
+   
+         else if (qumvia_qff == 5) then
+            call readgaunmodes(qva_cli,nqmatoms,ndf,nvdf,L,freq,hii,atmass)
+            nmodes=0d0
+            nmodes(:,7:ndf)=L
+            eig=0d0
+            eig(7:ndf)=hii
+         end if
+   
+!        ---------------------------------------------------------------
+!        STATE-SPECIFIC VSCF/VCI           
+!        ---------------------------------------------------------------
+!        Number of additional reference configurations
+         naddref=qva_nml%qva_naddref
+!        Max excitation in singles
+         qmaxx1=qva_nml%vci_qmax1
+!        Max excitqvaon in doubles
+         qmaxx2=qva_nml%vci_qmax2
+!        Max excitation in triples
+         qmaxx3=qva_nml%vci_qmax3
+!        Max excitation in quadruples
+         qmaxx4=qva_nml%vci_qmax4
+!        Overall Energy Threshold
+         ethresh=qva_nml%ethresh
+!        Resonance cutoff
+         resthresh=qva_nml%resthresh
+!        Selection cutoff for 1st order resonance
+         selcut1=qva_nml%selcut1
+!        Selection cutoff for 2nd order resonance
+         selcut2=qva_nml%selcut2
+!        Total number of configurations
+         nconf = 1 + &
+               & nvdf*qmaxx1 + &
+               & nvdf*(nvdf-1)*qmaxx2**2/2 + &
+               & nvdf*(nvdf-1)*(nvdf-2)*qmaxx3**3/6 + &
+               & nvdf*(nvdf-1)*(nvdf-2)*(nvdf-3)*qmaxx4**4/24
+         write(77,'(A,I15)') 'NUMBER OF INITIAL CONFIGURATIONS: ',nconf
+         if (nconf > 500000) nconf=500000
+!        Number of reference states to compute
+         nrst=1+nvdf+naddref
+!        DANGER version 2 of the following subroutine
+         call ssvscf_csvci2(qva_nml,qva_cli,qumvia_nmc,qumvia_qff,ethresh,resthresh,selcut1,&
+                         &selcut2,ndf,nvdf,ngaus,nmcoup,nqmatoms,nclatoms,&
+                         &qmaxx1,qmaxx2,qmaxx3,qmaxx4,nconf,at_numbers,dy,gwidth,&
+                         &eig,nmodes,qvageom,clcoords,naddref,nrst)
+   
+         deallocate(P,Po,Q1,Q2,Q3,Hcore,hii,tiii,uiiii,tiij,tjji,&
+                   &uiiij,ujjji,uiijj,tijk,uiijk,uijjk,uijkk)
+   
+      end subroutine
 
 
 !######################################################################

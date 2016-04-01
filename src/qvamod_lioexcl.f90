@@ -31,57 +31,59 @@ module qvamod_lioexcl
 ! ----------------------------------------------------------------
 
    use qvamod_common
+   use qva_global_module
 
    implicit none
    private
-   public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml,&
-           & print_lio_nml
+   public :: fullnumqff,seminumqff,hessian,get_lio_nml,print_lio_nml,hessian2
 
+!  public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml,&
+!          & print_lio_nml
 
-   type lio_nml_type
-      character(len=20) :: basis
-      character(len=20) :: output
-      character(len=20) :: fcoord
-      character(len=20) :: fmulliken
-      character(len=20) :: frestart
-      character(len=20) :: frestartin
-      logical :: verbose
-      logical :: OPEN
-      integer :: NMAX
-      integer :: NUNP
-      logical :: VCINP
-      real*8  :: GOLD
-      real*8  :: told
-      real*8  :: rmax
-      real*8  :: rmaxs
-      logical :: predcoef
-      integer :: idip
-      logical :: writexyz
-      logical :: intsoldouble
-      logical :: DIIS
-      integer :: ndiis
-      real*8  :: dgtrig
-      integer :: Iexch
-      logical :: integ
-      logical :: DENS
-      integer :: IGRID
-      integer :: IGRID2
-      integer :: timedep
-      real*8  :: tdstep
-      integer  :: ntdstep
-      logical :: field
-      logical :: exter
-      real*8  :: a0
-      real*8  :: epsilon
-      real*8  :: Fx
-      real*8  :: Fy
-      real*8  :: Fz
-      integer  :: NBCH
-      integer :: propagator
-      logical :: writedens
-      logical :: tdrestart
-      integer :: qmcharge
-   end type lio_nml_type
+!   type lio_nml_type
+!      character(len=20) :: basis
+!      character(len=20) :: output
+!      character(len=20) :: fcoord
+!      character(len=20) :: fmulliken
+!      character(len=20) :: frestart
+!      character(len=20) :: frestartin
+!      logical :: verbose
+!      logical :: OPEN
+!      integer :: NMAX
+!      integer :: NUNP
+!      logical :: VCINP
+!      real*8  :: GOLD
+!      real*8  :: told
+!      real*8  :: rmax
+!      real*8  :: rmaxs
+!      logical :: predcoef
+!      integer :: idip
+!      logical :: writexyz
+!      logical :: intsoldouble
+!      logical :: DIIS
+!      integer :: ndiis
+!      real*8  :: dgtrig
+!      integer :: Iexch
+!      logical :: integ
+!      logical :: DENS
+!      integer :: IGRID
+!      integer :: IGRID2
+!      integer :: timedep
+!      real*8  :: tdstep
+!      integer  :: ntdstep
+!      logical :: field
+!      logical :: exter
+!      real*8  :: a0
+!      real*8  :: epsilon
+!      real*8  :: Fx
+!      real*8  :: Fy
+!      real*8  :: Fz
+!      integer  :: NBCH
+!      integer :: propagator
+!      logical :: writedens
+!      logical :: tdrestart
+!      integer :: qmcharge
+!   end type lio_nml_type
 
 
 contains
@@ -735,6 +737,213 @@ contains
 
      end subroutine
 
+     subroutine eckart2(hess,qmcoords,clcoords,at_numbers,atnum_qmmm,ndf,ndfall,nqmatoms,nclatoms,hessp,hessbigP)
+     implicit none
+!    ------------------------------------------------------------------
+     integer,intent(in)  :: ndf,ndfall
+     integer,intent(in)  :: nqmatoms
+     integer,intent(in)  :: nclatoms
+     integer,intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+     integer,intent(in)  :: atnum_qmmm(nqmatoms+nclatoms) ! Atomic numbers of all atoms.
+     real*8,intent(in)   :: hess(ndf,ndf)
+     real*8,intent(in)   :: qmcoords(3,nqmatoms)
+     real*8,intent(in)   :: clcoords(4,nqmatoms)
+     real*8,intent(out)  :: hessp(ndf,ndf)
+     real*8,intent(out)  :: hessbigP(ndfall,ndfall)
+!    Internal variables
+     integer             :: i,j,k,iat
+     integer             :: nat
+     integer             :: zeros(2),nonz(2)
+     integer             :: ipiv(3)
+     real*8              :: Xqm(3,nqmatoms)
+     real*8              :: Xcl(3,nclatoms)
+     real*8              :: X0(3,nqmatoms+nclatoms)
+     real*8              :: Itsr(3,3)
+     real*8              :: innp(3,3)
+     real*8              :: outp(3,3)
+     real*8              :: ai(3)
+     real*8              :: atmp
+     real*8              :: cutoff
+     real*8              :: det
+     real*8              :: trp
+     real*8              :: summ
+     real*8              :: totM
+     real*8              :: cmass(3)
+     real*8              :: unitv(3,3)
+     real*8              :: SV(6)
+
+     real*8,allocatable  :: Mass(:)
+     real*8,allocatable  :: TRmat(:,:)
+     real*8,allocatable  :: hessbig(:,:)
+     real*8,allocatable  :: P(:,:)
+     real*8,allocatable  :: tmp(:,:)
+
+     real*8,external  :: ddot
+
+     real*8,  dimension(:,:), allocatable :: VT,U
+
+     real*8,  dimension(:), allocatable :: WORK,IWORK
+     integer                            :: LWORK,INFO
+     include "qvmbia_param.f"
+!    ------------------------------------------------------------------
+
+     unitv=reshape((/ 1d0, 0d0, 0d0, &
+                  &   0d0, 1d0, 0d0, &
+                  &   0d0, 0d0, 1d0 /),(/3,3/))
+     nat=nqmatoms+nclatoms
+     allocate( Mass(ndfall),&
+             & TRmat(ndfall,6),&
+             & hessbig(ndfall,ndfall),&
+             & P(ndfall,ndfall),&
+             & tmp(ndfall,ndfall) )
+
+!    Converting initial coordinates to AU
+     Xqm=qmcoords/a0
+     Xcl=clcoords(1:3,:)/a0
+
+!    Complete coordinates vector.
+     X0(:,1:nqmatoms)=Xqm
+     X0(:,nqmatoms+1:nat)=Xcl
+
+!    Computing total mass and atomic mass array and center of mass.
+     totM=0.0d0
+     do i=1,nat
+         do j=1,3
+             k=atnum_qmmm(i)
+             Mass(3*(i-1)+j) = SQRT(isomass((k-1)*4+1))
+             cmass(j)=cmass(j)+isomass((k-1)*4+1)*X0(j,i)
+!             version with atomic masses in AU
+!             Mass(3*(i-1)+j) = sqrt_atomic_masses_au(k)
+!             cmass(j)=cmass(j)+atomic_masses_au(k)*X0(j,i)
+         end do
+!        DANGER
+!         totM=totM+atomic_masses_au(k)
+         totM=totM+isomass((k-1)*4+1)
+     end do
+     cmass = cmass/totM
+
+!    Translating to center of mass and mass-weighting.
+     do i=1,nat
+        do j=1,3
+           X0(j,i)=(X0(j,i)-cmass(j))*Mass(3*(i-1)+j)
+        end do
+     end do
+
+
+!    Moment of inertia tensor.
+!    Itsr = Sum_i [ai**T.ai - ai.ai**T]
+     Itsr=0.0d0
+     do i=1,nat
+        ai=X0(:,i)
+        innp=0.0d0
+        outp=0.0d0
+        innp(1,1) = ddot(3,ai,1,ai,1)
+        innp(2,2) = innp(1,1)
+        innp(3,3) = innp(1,1)
+        call dger(3,3,1d0,ai,1,ai,1,outp,3)
+!        call dsyr('U',3,1d0,ai,1,outp,3)
+        Itsr=Itsr+innp-outp
+     end do
+
+!    Symmetrizing inertia tensor.
+     do i=1,2
+        do j=i+1,3
+          Itsr(j,i)=Itsr(i,j)
+        end do
+     end do
+
+!     write(77,'(A)') 'INERTIA TENSOR'
+!     do i=1,3
+!        write(77,'(3D11.2)') Itsr(i,:)
+!     end do
+
+
+!    WE NOW COMPUTE THE PROJECTOR MATRIX P
+!    THE FORMULA CAN BE FOUND IN 
+!    Szalay, JCP 140:234107, (2014), eq 9, and eq. 17
+!    Note that although eq. 12 is only an orthonormalized version of
+!    eq. 9. Also, we only implemented Eckart conditions. Sayvetz 
+!    conditions are left for another time.
+
+!    Also, the following paper may be of interest.
+!    Miller, Handy and Adams, JCP 72:99,(1980) eq 4.11
+
+!    The imposition of Eckart conditions is made by projection.
+
+!                  PHess = P.Hess.P
+
+!    Initializing TRmat
+     Trmat=0d0
+
+!    Computing translation and rotation vectors.
+     do i=1,3
+        do iat=1,nat
+           TRmat(3*(iat-1)+i,i)=Mass(3*(iat-1)+i)/Sqrt(TotM)  ! Translation
+           TRmat(3*(iat-1)+i,4:6) = crossp(X0(:,iat),unitv(i,:)) ! Rotation
+        end do
+     end do
+
+!    Orthonormalization of translation and rotation vectors by singular value decomposition method.
+     LWORK=-1
+     allocate(VT(6,6),U(0,0),WORK(1000),IWORK(8*6))
+     call dgesdd('O',ndfall,6,TRmat,ndfall,SV,U,ndfall,VT,6,WORK,LWORK,IWORK,INFO)
+     LWORK=WORK(1)
+     deallocate(WORK)
+     allocate(WORK(LWORK))
+     call dgesdd('O',ndfall,6,TRmat,ndfall,SV,U,ndfall,VT,6,WORK,LWORK,IWORK,INFO)
+     deallocate(WORK,IWORK,U,VT)
+     if (INFO /= 0) STOP ('Error during singular value decomposition in eckart subroutine')
+
+!    Building projection matrix by external product of TRmat.
+     call dgemm('n','t',ndfall,ndfall,6,1d0,TRmat,ndfall,TRmat,ndfall,0d0,P,ndfall)
+     
+     P=-P
+     do i=1,ndfall
+        P(i,i) = 1.0d0 + P(i,i)
+     end do
+
+!     cutoff = 1.0d-08
+!     do i=1,ndfall-1
+!        do j=i+1,ndfall
+!           if (abs(P(i,j)) < cutoff) P(i,j)=0d0
+!           P(j,i)=P(i,j)
+!        end do
+!     end do
+!     write(77,'(A)') 'PROJECTOR 1-P'
+!     do i=1,ndfall
+!        write(77,'(999D9.2)') P(i,:)
+!     end do
+
+
+!    PROJECTION
+!    HESSP = (1-P).HESS.(1-P)
+     hessp=0d0
+     hessbig=0d0
+     hessbigP=0d0
+     if (nclatoms > 0) then
+        do i=nqmatoms+1,nat
+           hessbig(i,i)=1.0D-08
+        end do
+     end if
+     hessbig(1:ndf,1:ndf)=hess
+
+     call dsymm('L','U',ndfall,ndfall,1d0,hessbig,ndfall,P,ndfall,0d0,tmp,ndfall)
+     call dgemm('N','N',ndfall,ndfall,ndfall,1d0,P,ndfall,tmp,ndfall,0d0,hessbigP,ndfall)
+     hessp=hessbigP(1:ndf,1:ndf)
+     do i=1,ndf
+        do j=1,ndf
+           if (abs(hessp(i,j)) < 1d-10) hessp(i,j)=0d0
+        end do
+     end do
+!     write(77,'(A)') 'PROJECTED HESSIAN'
+!     do i=1,ndf
+!        write(77,'(999D10.2)') hessp(i,:)
+!     end do
+    
+     return
+
+     end subroutine
+
      function crossp(v1,v2)
 !       ---------------------------------------------------------------------
 !       Computes cross product v1 x v2 = vr, with all vectors dimension 3
@@ -1118,7 +1327,343 @@ contains
       end subroutine
  
 
+     subroutine hessian2(qmcoords,clcoords,nqmatoms,nclatoms,h,hess_norder,at_numbers,nmodes,eig,atnum_qmmm)
 
+      implicit none
+
+!     -------------------------------------------------------------------------
+      real*8,  intent(in) :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      real*8,  intent(in) :: clcoords(4,nqmatoms) ! QM atom coordinates
+      real*8,  intent(in) :: h                    ! Finite differences displacement factor.
+      integer, intent(in) :: hess_norder          ! Finite differences displacement factor.
+      integer, intent(in) :: nqmatoms             ! Number of QM atoms
+      integer, intent(in) :: nclatoms             ! Number of QM atoms
+      integer, intent(in) :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+      integer, intent(in) :: atnum_qmmm(nqmatoms+nclatoms) ! Atomic numbers of QM atoms.
+      real*8,  intent(out):: nmodes(3*nqmatoms,3*nqmatoms)  ! Hessian eigenvectors
+      real*8,  intent(out):: eig(3*nqmatoms)      ! Hessian eigenvalues
+!     LOCAL VARIABLES
+!      integer,parameter   :: nclatoms=0
+!      integer             :: ncoords              ! 3*nqmatoms
+      integer             :: nat                  ! number of qm+mm atoms.
+      integer             :: ndf                  ! qm deg of freedom
+      integer             :: ndfall               ! qm+mm deg of freedom
+      integer             :: i,j,k,r,s,m
+      real*8              :: dxyzcl(3,nclatoms)   ! SCF MM force
+      real*8              :: dxyzqm(3,nqmatoms)   ! SCF QM force
+      real*8              :: hau                  ! h in bohrs
+
+      real*8              :: escf                 ! SCF energy
+      real*8              :: tmp1,tmp2            ! Auxiliary variables for hessian calc.
+      real*8              :: hhi,hhj
+      real*8              :: dipxyz(3)            ! Dipole moment
+      real*8              :: grad0(3*nqmatoms)
+      real*8              :: hess(3*nqmatoms,3*nqmatoms)
+      real*8              :: hessp(3*nqmatoms,3*nqmatoms)
+      real*8              :: at_masses(3*nqmatoms)
+      real*8              :: sign_eig(3*nqmatoms)
+      real*8              :: freq(3*nqmatoms)
+      real*8              :: qmxyz(3,nqmatoms)
+!      real*8              :: clcoords(4,nqmatoms)
+
+      type(qva_nml_type), save     :: qva_nml
+
+!     Workspace for diagonalization. 
+      character(len=117) :: format1
+      character(len=117) :: format2
+      real*8,allocatable  :: hessbigP(:,:)
+      real*8,allocatable  :: eigall(:)      ! Hessian eigenvalues
+      real*8,allocatable  :: sign_eigall(:)
+      real*8,allocatable  :: freqall(:)
+      real*8,  dimension(:), allocatable    :: WORK, WORK2
+      real*8,  dimension(:,:,:),allocatable :: grad
+      integer, dimension(:), allocatable    :: IWORK, IWORK2
+      integer :: LWORK, LIWORK, INFO
+
+!     PARAMETERS
+      real*8, PARAMETER :: h2cm=219475.64d0  ! Convert hartee/bohr^2/emu to cm-1
+      real*8, PARAMETER :: freq2cm=5141.1182009496200901D0 ! Convert freq to cm-1
+
+      include "qvmbia_param.f"
+!     -------------------------------------------------------------------------
+!
+      hau=h/a0                         ! step for num differentiation in bohrs
+      ndf=3*nqmatoms
+      nat=nqmatoms+nclatoms
+      ndfall=3*nat
+
+      dxyzqm=0.0D0
+      dxyzcl=0.0D0
+      hess=0.0D0
+      eig=0.0D0
+      freq=0.0D0
+      sign_eig=1.0D00
+      at_masses=0.0D0
+
+!     Create a vector of inverse square-root masses corresponding to each 
+!     cartesian coordinate.
+      do i=1,nqmatoms
+         do j=1,3
+            k=at_numbers(i)
+            at_masses(3*(i-1)+j) = isomass((k-1)*4+1)
+         end do
+      end do
+
+      if (hess_norder==1) then
+         allocate (grad(3*nqmatoms,-1:1,3*nqmatoms))
+      else
+         allocate (grad(3*nqmatoms,-2:2,3*nqmatoms))
+      end if
+      grad=0.0D0
+
+!     Calculating energy and gradient at the initial geometry.
+      call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+      call dft_get_qm_forces(dxyzqm)
+      call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+      do i=1,nqmatoms
+         do j=1,3
+            grad0(3*(i-1)+j)=dxyzqm(j,i)
+         end do
+      end do
+
+!     Calculating gradients in displaced positions along the 
+!     QM coordinates.
+
+      do i=1,nqmatoms
+         do j=1,3
+
+            k=3*(i-1)+j
+
+!           NOTE:
+!           qmxyz must be in Angstroms. It will be later transfromed into AU in SCF_in.
+!           The displacement factor h has units of Angs*amu^1/2, so in order to use it 
+!           for simple cartesians in Angs we must divide by sqrt(mi), with mi the mass 
+!           of the atom being displaced. In this way heavy atoms are less displaced than 
+!           light atoms, and the numerical differentiation should be better balanced.
+
+!           Forward displacement
+!           --------------------
+            qmxyz=qmcoords
+            qmxyz(j,i)=qmcoords(j,i)+h/sqrt(at_masses(k))
+            call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
+            call dft_get_qm_forces(dxyzqm)
+            call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+
+            do r=1,nqmatoms
+             do s=1,3
+               grad(k,1,3*(r-1)+s)=dxyzqm(s,r)
+             end do
+            end do
+
+!           Backward displacement
+!           ---------------------
+            qmxyz=qmcoords
+            qmxyz(j,i)=qmcoords(j,i)-h/sqrt(at_masses(k))
+            call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
+            call dft_get_qm_forces(dxyzqm)
+            call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+            do r=1,nqmatoms
+             do s=1,3
+               grad(k,-1,3*(r-1)+s)=dxyzqm(s,r)
+             end do
+            end do
+
+            if (hess_norder==2) then
+
+!              Forward 2x displacement
+!              -----------------------
+               qmxyz=qmcoords
+               qmxyz(j,i)=qmcoords(j,i)+2d0*h/sqrt(at_masses(k))
+               call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
+               call dft_get_qm_forces(dxyzqm)
+               call dft_get_mm_forces(dxyzcl,dxyzqm)
+               do r=1,nqmatoms
+                do s=1,3
+                  grad(k,2,3*(r-1)+s)=dxyzqm(s,r)
+                end do
+               end do
+
+!              Backward 2x displacement
+!              ------------------------
+               qmxyz=qmcoords
+               qmxyz(j,i)=qmcoords(j,i)-2d0*h/sqrt(at_masses(k))
+               call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
+               call dft_get_qm_forces(dxyzqm)
+               call dft_get_mm_forces(dxyzcl,dxyzqm)
+               do r=1,nqmatoms
+                do s=1,3
+                  grad(k,-2,3*(r-1)+s)=dxyzqm(s,r)
+                end do
+               end do
+
+            end if
+
+         end do
+      end do
+      write(77,'(A)') 'FINISHED ALL GRADIENTS COMPUTATIONS, NOW COMPUTING HESSIAN'
+
+
+!     Calculating elements of the Hessian and mass weighting.
+      IF (hess_norder==1) THEN
+
+         do i=1,ndf
+             do j=i,ndf
+                tmp1=0d0
+                tmp2=0d0
+                hhi=hau/sqrt(at_masses(i))
+                hhj=hau/sqrt(at_masses(j))
+                if (i==j) then
+                   tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi    ! Finite difference.
+                   hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
+                else
+                   tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi
+                   tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/hhj
+                   hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
+                end if 
+             end do
+         end do
+
+      ELSE
+
+         do i=1,ndf
+             do j=i,ndf
+                tmp1=0d0
+                tmp2=0d0
+                hhi=hau/sqrt(at_masses(i))
+                hhj=hau/sqrt(at_masses(j))
+                if (i==j) then
+                   tmp1=(grad(i,-2,j)+8d0*grad(i,1,j)-8d0*grad(i,-1,j)-grad(i,2,j))/(12d0*hhi)    ! Finite difference.
+                   hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
+                else
+                   tmp1=(grad(i,-2,j)+8d0*grad(i,1,j)-8d0*grad(i,-1,j)-grad(i,2,j))/(12d0*hhi)    ! Finite difference.
+                   tmp2=(grad(j,-2,i)+8d0*grad(j,1,i)-8d0*grad(j,-1,i)-grad(j,2,i))/(12d0*hhj)    ! Finite difference.
+                   hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
+                end if 
+             end do
+         end do
+
+      END IF
+
+!     Projecting out translational and rotaional modes from hessian (Eckart conditions).
+      allocate( hessbigP(ndfall,ndfall),freqall(ndfall),eigall(ndfall),sign_eigall(ndfall) )
+      call eckart2(hess,qmcoords,clcoords,at_numbers,atnum_qmmm,ndf,ndfall,nqmatoms,nclatoms,hessp,hessbigP)
+
+!     Write hessian to file
+      write(77,*), '     WRITING HESSIAN MATRIX     '
+      write(77,*), '     ----------------------     '
+      do i=1,ndfall
+          write(77,'(I3,999D11.3)'), i, ( hessbigP(i,j), j=1,ndfall )
+      end do
+
+!     Scaling hessian to avoid numerical problems.
+      hessbigP=hessbigP*1000d0
+
+!     Initializing variables
+      eigall=0.0D0
+      freqall=0.0D0
+      sign_eigall=1.0D00
+
+!     DIAGONALIZATION OF THE HESSIAN
+      allocate ( work(1000), IWORK(1000) )
+      LWORK=-1
+      call dsyevd('V','U',ndfall,hessbigP,ndfall,eigall,WORK,LWORK,IWORK,LWORK,INFO)
+      LWORK=WORK(1)
+      LIWORK=IWORK(1)
+      if(allocated(WORK2)) deallocate (WORK2,IWORK2)
+      allocate (WORK2(LWORK),IWORK2(LIWORK))
+      call dsyevd('V','U',ndfall,hessbigP,ndfall,eigall,WORK2,LWORK,IWORK2,LIWORK,INFO)
+      deallocate( WORK, IWORK, WORK2, IWORK2 )
+
+
+!     Descaling eigallenvalues.
+      eigall=eigall/1000d0
+
+!     Convert frequecies to wavenumbers
+      do i = 1,ndfall
+         freqall(i) = sign(sign_eigall(i),eigall(i))*freq2cm*sqrt(abs(eigall(i)))
+      ENDDO
+
+!     Fix the phase of the eigenvectors
+!      call fixphase(hess,qmcoords,ndf,nqmatoms)
+
+
+      format1="(9999F9.2)"
+      format2="(9999D11.3)"
+!     Write eigenvector and eigenvalues to file
+      write(77,*) 
+      write(77,*) '     VIBRATIONAL FREQUENCIES OF QM + MM SYSTEM'
+      write(77,*) '     -----------------------------------------'
+      write(77,*) 
+      write(77,format1) freqall
+      write(77,*) 
+      write(77,*) 
+
+      hess = hessp
+
+!     Scaling hessian to avoid numerical problems.
+      hess=hess*1000D0
+
+!     DIAGONALIZATION OF THE HESSIAN
+      allocate ( work(1000), IWORK(1000) )
+      LWORK=-1
+      call dsyevd('V','U',ndf,hess,ndf,eig,WORK,LWORK,IWORK,LWORK,INFO)
+      LWORK=WORK(1)
+      LIWORK=IWORK(1)
+      if(allocated(WORK2)) deallocate (WORK2,IWORK2)
+      allocate (WORK2(LWORK),IWORK2(LIWORK))
+      call dsyevd('V','U',ndf,hess,ndf,eig,WORK2,LWORK,IWORK2,LIWORK,INFO)
+      deallocate( WORK, IWORK, WORK2, IWORK2 )
+
+!     Descaling eigenvalues.
+      eig=eig/1000d0
+
+!     Convert frequecies to wavenumbers
+      do i = 1,ndf
+         freq(i) = sign(sign_eig(i),eig(i))*freq2cm*sqrt(abs(eig(i)))
+      ENDDO
+
+!     Fix the phase of the eigenvectors
+      call fixphase(hess,qmcoords,ndf,nqmatoms)
+
+
+      format1="(9999F9.2)"
+      format2="(9999D11.3)"
+!     Write eigenvector and eigenvalues to file
+      write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*) '     VIBRATIONAL RESULTS WITH ECKART CONDITIONS'
+      write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*) 
+      write(77,*) ' LIST OF FREQUENCIES (CM-1)'
+      write(77,format1) freq
+      write(77,*)
+      write(77,*)             '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*)             '           WRITING NORMAL MODES            '
+      write(77,*)             '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
+      write(77,*)
+      do j=7,ndf
+         write(77,'(A,i3)')   'MODE =',j-6
+         write(77,'(A,F9.2)') 'FREQUENCY (CM-1) =',freq(j)
+         write(77,'(A)')      '-------------------------------------------'
+         write(77,'(A)')      ' AT       X            Y            Z      '
+         write(77,'(A)')      '-------------------------------------------'
+         do k=1,nqmatoms
+            r=3*(k-1)+1
+            s=r+2
+            write(77,'(i3,3F13.8)')  k, hess(r:s,j)
+         end do
+         write(77,*)
+         write(77,*)
+      end do
+
+      nmodes=hess
+!     Converting eigenvectors form Hartree/bohr^2/amu to Hartree/bohr^2/emu
+      eig=eig/AMU_TO_AU
+
+      return
+      end subroutine
 
 
 
