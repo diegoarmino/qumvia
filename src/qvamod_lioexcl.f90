@@ -35,7 +35,7 @@ module qvamod_lioexcl
 
    implicit none
    private
-   public :: fullnumqff,seminumqff,hessian,get_lio_nml,print_lio_nml,hessian2
+   public :: fullnumqff,seminumqff,hessian,get_lio_nml,print_lio_nml,hessian2,seminumqff_nmsel
 
 !  public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml,&
 !          & print_lio_nml
@@ -2428,6 +2428,395 @@ contains
       write(77,'(9D14.6)') eig
       end subroutine
 
+      subroutine seminumqff_nmsel(nmodes,eig,dy,nqmatoms,nclatoms,qmcoords,clcoords,&
+                     &at_numbers,ndf,nvdf,nunselnm,&
+                     &hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,uiijj, &
+                     &tijk,uiijk,uijjk,uijkk)
+!     ------------------------------------------------------------------
+!     COMPUTES A SEMINUMERICAL QUARTIC FORCE FIELD USING ANALYTICAL 
+!     GRADIENT CALLS UP TO 3-MODES COUPLINGS.
+!     ------------------------------------------------------------------
+      implicit none
+
+      integer, intent(in) :: ndf                  ! Number of deg of freedm (3*nqmatoms)
+      integer, intent(in) :: nvdf                 ! Number of vib degrees of freedom (ndf-6)
+      integer, intent(in) :: nunselnm             ! Number of low freq modes to eliminate.
+      integer, intent(in) :: nqmatoms             ! Number of QM atoms
+      integer, intent(in) :: nclatoms             ! Number of classical atoms
+      integer, intent(in) :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+      real*8, intent(in)  :: nmodes(ndf,ndf)      ! mw Hessian eigenvectors.
+      real*8, intent(in)  :: eig(ndf)             ! mw Hessian eigenvalues.
+      real*8, intent(in)  :: dy                   ! Step size factor dy. Default=0.5d0
+      real*8, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      real*8, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
+      real*8, intent(out) :: hii(nvdf)           ! Diagonal cubic coupling terms
+      real*8, intent(out) :: tiii(nvdf)           ! Diagonal cubic coupling terms
+      real*8, intent(out) :: uiiii(nvdf)          ! Diagonal quartic coupling terms
+      real*8, intent(out) :: tiij(nvdf,nvdf)      ! 2-mode cubic coupling terms
+      real*8, intent(out) :: tjji(nvdf,nvdf)      ! 2-mode cubic coupling terms
+      real*8, intent(out) :: uiiij(nvdf,nvdf)     ! 2-mode quartic coupling terms
+      real*8, intent(out) :: ujjji(nvdf,nvdf)     ! 2-mode quartic coupling terms
+      real*8, intent(out) :: uiijj(nvdf,nvdf)     ! 2-mode quartic coupling terms
+      real*8, intent(out) :: tijk(nvdf,nvdf,nvdf)      ! 3-mode cubic coupling terms
+      real*8, intent(out) :: uiijk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+      real*8, intent(out) :: uijjk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+      real*8, intent(out) :: uijkk(nvdf,nvdf,nvdf)     ! 3-mode quartic coupling terms
+
+      real*8              :: L(ndf,nvdf)          ! Array of VIBRATIONAL nmodes.
+      real*8              :: omega(nvdf)          ! Harmonic frequencies omega(nm)=Sqrt(hii(nm))
+      real*8              :: dxyzcl(3,nclatoms)   ! SCF MM force
+      real*8              :: dxyzqm(3,nqmatoms)   ! SCF QM force
+      real*8              :: X0(3,nqmatoms)       ! Initial geometry in cartesian and Angstroms.
+      real*8              :: Xm(3,nqmatoms)       ! Displaced geometry in cartesian and Angstroms.
+      real*8              :: dX(3,nqmatoms)       ! Displacement vector (cart and Angs).
+      real*8              :: dX1(3,nqmatoms)      ! Displacement vector (cart and Angs).
+      real*8              :: dX2(3,nqmatoms)      ! Displacement vector (cart and Angs).
+      real*8              :: dQ(nvdf)             ! dQ(mode) = dy/Sqrt(omega_i) in Atomic units.
+      real*8              :: Mass(ndf)            ! Sqrt mass weights matrix.
+      real*8              :: Minv(ndf)            ! Inverse sqrt mass weights matrix.
+      real*8              :: gtmp(ndf)
+      real*8              :: gnc(nvdf)
+      real*8              :: grad0(nvdf)
+      real*8              :: grad1(nvdf,4,nvdf)
+      real*8              :: grad2(nvdf,4,nvdf,nvdf)
+      real*8              :: escf                 ! Energy computed by SCF_in()
+      real*8              :: dipxyz(3)            ! Dipole moment computed by SCF_in()
+      real*8              :: tmp1
+      real*8              :: tmp2
+      real*8              :: tmp3
+      integer             :: i, j, k
+      integer             :: m, nm, p
+      integer             :: nm1, nm2, nm3, gp
+      integer             :: step_count
+      integer             :: dd(4)
+      integer             :: grdi(4),grdj(4)
+    
+      include "qvmbia_param.f"
+!     Eliminating rotational and translational degrees of freedom.
+      do nm=7+nunselnm,ndf
+         L(:,nm-6-nunselnm)=nmodes(:,nm)
+         hii(nm-6-nunselnm)=eig(nm)
+      end do
+
+!     We define the step size acording to J.Chem.Phys 121:1383
+!     Using a dimensionless reduced coordinate y=sqrt(omega_i/hbar)Qi
+!     where omega_i is the freq of mode i and Qi is normal coordinate 
+!     of mode i. Then the step size dQi is given by
+!
+!                    dQi = dy/sqrt(omega_i)
+!
+!     Where omega_i = Sqrt(Ki/mi) in atomic units (hbar=1). 
+!     dy is arbitrary and set to 0.5 by default.
+!     To obtain the displacement vector in cartesian coordinates dXi
+!                  
+!                   dXi = M^(-1) * Li * dQi
+!
+!     Where M^(-1) is the inverse mass weights matrix diag(1/Sqrt(mi))
+!     Li is the normal mode i (a column eigenvector of the hessian).
+      write(77,'(A)')'------------------------------------------------------------------------' 
+      write(77,'(A)')'         STARTING SEMINUMERICAL QFF COMPUTATION USING GRADIENTS         ' 
+      write(77,'(A)')'------------------------------------------------------------------------' 
+
+      omega = Sqrt(hii)
+      dQ = dy/Sqrt(omega)
+
+
+!     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
+      do i=1,nqmatoms
+          do j=1,3
+              k=at_numbers(i)
+              Mass(3*(i-1)+j) = sqrt_atomic_masses_au(k)
+              Minv(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
+          end do
+      end do
+
+
+!     Energy at initial geometry
+      call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+      call dft_get_qm_forces(dxyzqm)
+      call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+!     Mass weight gradient
+      do i=1,nqmatoms
+          do j=1,3
+              gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+          end do
+      end do
+
+!     Convert to normal coordinates.
+      call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
+      grad0=gnc
+
+
+
+!-----------------------------------------------------------------------
+!     DIAGONAL QFF TERMS
+!-----------------------------------------------------------------------
+!     Converting units from Angstroms to Bohrs. We work in Bohrs.
+!     Convert back to Angstroms before calling SCF_in
+      X0=qmcoords/a0 
+
+!     Calculating displaced coordinates and energy at 6 grid points 
+!     along each normal mode.
+      dd=(/-2,-1,1,2/)
+      write(77,'(A)') 'LABELS FOR 1d STENCIL POINTS'
+      write(77,'(4I3)') (dd(i),i=1,4)
+      tiii=0.0d0
+      uiiii=0.0d0
+      grad1=0d0
+      step_count=1
+      write(*,*) 'ENERGY STEP No  ', step_count
+      do nm=1,nvdf
+         do j=1,4
+            do k=1,nqmatoms
+               do m=1,3
+                  p = 3*(k-1)+m
+                  dX(m,k) = Minv(p)*L(p,nm)*dQ(nm)   ! Scaling/Mass unweighting
+                  Xm(m,k) = X0(m,k) + dd(j)*dX(m,k)         ! Moving along nmode
+               end do
+            end do
+            Xm = Xm*a0  ! Convert to Angstroms.
+            call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)   ! Calc energy
+            call dft_get_qm_forces(dxyzqm)
+            call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+      !     Mass weight gradient
+            do k=1,nqmatoms
+                do m=1,3
+                    gtmp(3*(k-1)+m)=Minv(3*(k-1)+m)*dxyzqm(m,k)
+                end do
+            end do
+      
+      !     Convert to normal coordinates.
+            call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
+            grad1(:,j,nm)=gnc
+
+            step_count=step_count+1
+            write(77,'(A,I6,A,I6)') 'GRAD STEP No ', step_count,'/',1+nvdf*4+2*nvdf*(nvdf-1)
+         end do
+!        Calculating QFF diagonal terms tiii and uiiii
+         tiii(nm)=grad1(nm,4,nm)-2d0*grad0(nm)+grad1(nm,1,nm)
+         tiii(nm)=tiii(nm)*0.25D0/dQ(nm)**2
+
+         uiiii(nm)=grad1(nm,4,nm)+2D0*(grad1(nm,2,nm)-grad1(nm,3,nm))-grad1(nm,1,nm)
+         uiiii(nm)=uiiii(nm)*0.5d0/dQ(nm)**3
+      end do
+      
+!-----------------------------------------------------------------------
+!     2-MODE COUPLING QFF TERMS
+!-----------------------------------------------------------------------
+!            1  2  3  4
+      grdi=(/1,-1, 1,-1/)
+      grdj=(/1, 1,-1,-1/)         
+      grad2=0.0D0
+!     Calculating energy at stencil 2-d points {grdi(gp),grdj(gp)}
+      do nm1=1,nvdf-1
+         do nm2=nm1+1,nvdf
+            do gp=1,4
+
+               do k=1,nqmatoms
+                  do m=1,3
+                     p = 3*(k-1)+m
+                     dX1(m,k)=Minv(p)*L(p,nm1)*dQ(nm1)
+                     dX2(m,k)=Minv(p)*L(p,nm2)*dQ(nm2)
+                     Xm(m,k)=X0(m,k) + grdi(gp)*dX1(m,k) + grdj(gp)*dX2(m,k)
+                  end do
+               end do 
+
+               Xm = Xm*a0 ! Convert to Angstroms.
+               call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)
+               call dft_get_qm_forces(dxyzqm)
+               call dft_get_mm_forces(dxyzcl,dxyzqm)
+   
+               gtmp=0d0
+               gnc=0d0
+
+         !     Mass weight gradient
+               do k=1,nqmatoms
+                   do m=1,3
+                       gtmp(3*(k-1)+m)=Minv(3*(k-1)+m)*dxyzqm(m,k)
+                   end do
+               end do
+         
+         !     Convert to normal coordinates.
+               call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
+               grad2(:,gp,nm1,nm2)=gnc
+   
+               step_count=step_count+1
+               write(77,'(A,I6,A,I6)') 'GRAD STEP No ', step_count,'/',1+nvdf*4+2*nvdf*(nvdf-1)
+            end do 
+         end do
+      end do
+     
+!     Calculating QFF 2-mode coupling terms Tiij Tjji Uiiij Ujjji Uiijj 
+      tiij=0.0d0
+      tjji=0.0d0
+      uiiij=0.0d0
+      ujjji=0.0d0
+      uiijj=0.0d0
+      do nm1=1,nvdf-1
+         do nm2=nm1+1,nvdf
+!           KEY
+!           dd=(/-2,-1,1,2/)
+!           grdi=(/1,-1, 1,-1/)
+!           grdj=(/1, 1,-1,-1/)         
+
+            tmp1=0d0
+            tmp2=0d0
+            tmp1=grad1(nm2,4,nm1)-2d0*grad0(nm2)+grad1(nm2,1,nm1)
+            tmp1=tmp1*0.25d0/dQ(nm1)**2
+            tmp2=grad2(nm1,1,nm1,nm2)-grad2(nm1,2,nm1,nm2)-grad2(nm1,3,nm1,nm2)+grad2(nm1,4,nm1,nm2)
+            tmp2=tmp2/(4d0*dQ(nm1)*dQ(nm2))
+            tiij(nm1,nm2)=(tmp1+tmp2)*0.5d0
+
+            tmp1=0d0
+            tmp2=0d0
+            tmp1=grad1(nm1,4,nm2)-2d0*grad0(nm1)+grad1(nm1,1,nm2)
+            tmp1=tmp1*0.25d0/dQ(nm2)**2
+            tmp2=grad2(nm2,1,nm1,nm2)-grad2(nm2,2,nm1,nm2)-grad2(nm2,3,nm1,nm2)+grad2(nm2,4,nm1,nm2)
+            tmp2=tmp2/(4d0*dQ(nm1)*dQ(nm2))
+            tjji(nm1,nm2)=(tmp1+tmp2)*0.5d0
+
+            tmp1=0d0
+            tmp2=0d0
+            tmp1=grad1(nm2,4,nm1)-2d0*grad1(nm2,3,nm1)+2d0*grad1(nm2,2,nm1)-grad1(nm2,1,nm1)
+            tmp1=tmp1*0.5d0/dQ(nm1)**3
+            tmp2=grad2(nm1,1,nm1,nm2)-grad2(nm1,3,nm1,nm2)+grad2(nm1,2,nm1,nm2)-grad2(nm1,4,nm1,nm2)
+            tmp2=(tmp2-2d0*grad1(nm1,3,nm2)+2d0*grad1(nm1,2,nm2))/(2d0*dQ(nm2)*dQ(nm1)**2)
+            uiiij(nm1,nm2)=(tmp1+tmp2)*0.5d0
+
+            tmp1=0d0
+            tmp2=0d0
+            tmp1=grad1(nm1,4,nm2)-2d0*grad1(nm1,3,nm2)+2d0*grad1(nm1,2,nm2)-grad1(nm1,1,nm2)
+            tmp1=tmp1*0.5d0/dQ(nm2)**3
+            tmp2=grad2(nm2,1,nm1,nm2)+grad2(nm2,3,nm1,nm2)-grad2(nm2,2,nm1,nm2)-grad2(nm2,4,nm1,nm2)
+            tmp2=(tmp2-2d0*grad1(nm2,3,nm1)+2d0*grad1(nm2,2,nm1))/(2d0*dQ(nm1)*dQ(nm2)**2)
+            ujjji(nm1,nm2)=(tmp1+tmp2)*0.5d0
+
+            tmp1=0d0
+            tmp2=0d0
+            tmp1=grad2(nm2,1,nm1,nm2)-grad2(nm2,3,nm1,nm2)+grad2(nm2,2,nm1,nm2)-grad2(nm2,4,nm1,nm2)
+            tmp1=(tmp1-2d0*grad1(nm2,3,nm2)+2d0*grad1(nm2,2,nm2))/(2d0*dQ(nm2)*dQ(nm1)**2)
+            tmp2=grad2(nm1,1,nm1,nm2)+grad2(nm1,3,nm1,nm2)-grad2(nm1,2,nm1,nm2)-grad2(nm1,4,nm1,nm2)
+            tmp2=(tmp2-2d0*grad1(nm1,3,nm1)+2d0*grad1(nm1,2,nm1))/(2d0*dQ(nm1)*dQ(nm2)**2)
+            uiijj(nm1,nm2)= (tmp1+tmp2)*0.5d0
+         end do 
+      end do
+
+!     BEGINING COMPUTATION OF 3-MODE COUPLING TERMS.
+      tijk=0d0
+      uiijk=0d0
+      uijjk=0d0
+      uijkk=0d0
+      do nm1=1,nvdf-2
+         do nm2=nm1+1,nvdf-1
+            do nm3=nm2+1,nvdf
+!              KEY
+!              dd=(/-2,-1,1,2/)
+!              grdi=(/1,-1, 1,-1/)
+!              grdj=(/1, 1,-1,-1/)         
+               tmp1=0d0
+               tmp2=0d0
+               tmp3=0d0
+
+               tmp1=grad2(nm1,1,nm2,nm3)-grad2(nm1,3,nm2,nm3)
+               tmp1=tmp1-grad2(nm1,2,nm2,nm3)+grad2(nm1,4,nm2,nm3)
+               tmp1=tmp1/(2d0*dQ(nm2)*dQ(nm3))
+
+               tmp2=grad2(nm2,1,nm1,nm3)-grad2(nm2,3,nm1,nm3)
+               tmp2=tmp2-grad2(nm2,2,nm1,nm3)+grad2(nm2,4,nm1,nm3)
+               tmp2=tmp2/(2d0*dQ(nm1)*dQ(nm3))
+
+               tmp3=grad2(nm3,1,nm1,nm2)-grad2(nm3,3,nm1,nm2)
+               tmp3=tmp3-grad2(nm3,2,nm1,nm2)+grad2(nm3,4,nm1,nm2)
+               tmp3=tmp3/(2d0*dQ(nm1)*dQ(nm2))
+
+               tijk(nm1,nm2,nm3)=(tmp1+tmp2+tmp3)/3d0
+
+             
+               tmp1=0d0
+               tmp2=0d0
+
+               tmp1=grad2(nm3,1,nm1,nm2)-grad2(nm3,3,nm1,nm2)
+               tmp1=tmp1+grad2(nm3,2,nm1,nm2)-grad2(nm3,4,nm1,nm2)
+               tmp1=tmp1-2d0*grad1(nm3,3,nm2)+2d0*grad1(nm3,2,nm2)
+               tmp1=tmp1/(2d0*dQ(nm2)*dQ(nm1)**2)
+
+               tmp2=grad2(nm2,1,nm1,nm3)-grad2(nm2,3,nm1,nm3)
+               tmp2=tmp2+grad2(nm2,2,nm1,nm3)-grad2(nm2,4,nm1,nm3)
+               tmp2=tmp2-2d0*grad1(nm2,3,nm3)+2d0*grad1(nm2,2,nm3)
+               tmp2=tmp2/(2d0*dQ(nm3)*dQ(nm1)**2)
+
+               uiijk(nm1,nm2,nm3)=(tmp1+tmp2)*0.5d0
+
+
+               tmp1=0d0
+               tmp2=0d0
+
+               tmp1=grad2(nm1,1,nm2,nm3)-grad2(nm1,3,nm2,nm3)
+               tmp1=tmp1+grad2(nm1,2,nm2,nm3)-grad2(nm1,4,nm2,nm3)
+               tmp1=tmp1-2d0*grad1(nm1,3,nm3)+2d0*grad1(nm1,2,nm3)
+               tmp1=tmp1/(2d0*dQ(nm3)*dQ(nm2)**2)
+
+               tmp2=grad2(nm3,1,nm1,nm2)+grad2(nm3,3,nm1,nm2)
+               tmp2=tmp2-grad2(nm3,2,nm1,nm2)-grad2(nm3,4,nm1,nm2)
+               tmp2=tmp2-2d0*grad1(nm3,3,nm1)+2d0*grad1(nm3,2,nm1)
+               tmp2=tmp2/(2d0*dQ(nm1)*dQ(nm2)**2)
+
+               uijjk(nm1,nm2,nm3)=(tmp1+tmp2)*0.5d0
+
+
+               tmp1=0d0
+               tmp2=0d0
+
+               tmp1=grad2(nm2,1,nm1,nm3)+grad2(nm2,3,nm1,nm3)
+               tmp1=tmp1-grad2(nm2,2,nm1,nm3)-grad2(nm2,4,nm1,nm3)
+               tmp1=tmp1-2d0*grad1(nm2,3,nm1)+2d0*grad1(nm2,2,nm1)
+               tmp1=tmp1/(2d0*dQ(nm1)*dQ(nm3)**2)
+
+               tmp2=grad2(nm1,1,nm2,nm3)+grad2(nm1,3,nm2,nm3)
+               tmp2=tmp2-grad2(nm1,2,nm2,nm3)-grad2(nm1,4,nm2,nm3)
+               tmp2=tmp2-2d0*grad1(nm1,3,nm2)+2d0*grad1(nm1,2,nm2)
+               tmp2=tmp2/(2d0*dQ(nm2)*dQ(nm3)**2)
+
+               uijkk(nm1,nm2,nm3)=(tmp1+tmp2)*0.5d0
+
+            end do
+         end do
+      end do   
+      write(*,*) '----------------------------------------------'
+      write(*,*) '   FINISHED WITH QUARTIC FORCE FIELD COMP     '
+      write(*,*) '----------------------------------------------'
+      write(77,'(A)') '             QFF PARAMETERS'
+      write(77,'(A)') '----------------------------------------------'
+      write(77,'(A)') '                DIAGONAL'
+      write(77,'(A)') '----------------------------------------------'
+      do nm1=1,nvdf
+         write(77,'(I6,3D16.5)') nm1,hii(nm1),tiii(nm1),uiiii(nm1)
+      end do
+      write(77,'(A)') '----------------------------------------------'
+      write(77,'(A)') '           OFF-DIAGONAL DOUBLES               '
+      write(77,'(A)') '----------------------------------------------'
+      do nm1=1,nvdf-1
+         do nm2=nm1+1,nvdf
+            write(77,'(I4,I4,D16.5,D16.5,D16.5,D16.5,D16.5)') nm1,nm2,tiij(nm1,nm2), &
+                     &tjji(nm1,nm2), uiiij(nm1,nm2), ujjji(nm1,nm2), uiijj(nm1,nm2)
+         end do
+      end do
+      write(77,'(A)') '----------------------------------------------'
+      write(77,'(A)') '           OFF-DIAGONAL TRIPLES               '
+      write(77,'(A)') '----------------------------------------------'
+      do nm1=1,nvdf-2
+         do nm2=nm1+1,nvdf-1
+            do nm3=nm2+1,nvdf
+               write(77,'(3I4,99D16.5)') nm1,nm2,nm3,tijk(nm1,nm2,nm3), &
+                     &uiijk(nm1,nm2,nm3), uijjk(nm1,nm2,nm3), uijkk(nm1,nm2,nm3)
+            end do
+         end do
+      end do
+      write(77,'(A)') 'HESSIAN EIGENVALUES'
+      write(77,'(9D14.6)') eig
+      end subroutine
 
 end module qvamod_lioexcl
 

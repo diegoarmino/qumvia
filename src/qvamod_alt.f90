@@ -320,7 +320,11 @@ contains
 
          ngaus=16
          ndf=3*nqmatoms
-         nvdf=ndf-6
+         if (qva_nml%nmselect==.true.) then
+            nvdf=ndf-6-qva_nml%nunselnm
+         else
+            nvdf=ndf-6
+         end if
 
          allocate ( &
             P(ngaus,ngaus,nvdf),     &
@@ -435,12 +439,13 @@ contains
 !     FORCE FIELD SELECTION
 !######################################################################
       
-      subroutine selectqff(qva_cli,qumvia_qff,nmodes,eig,dy,nqmatoms,&
+      subroutine selectqff(qva_cli,qva_nml,qumvia_qff,nmodes,eig,dy,nqmatoms,&
                      &nclatoms,qmcoords,clcoords,at_numbers,ndf,nvdf,&
                      &hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,uiijj,&
                      &tijk,uiijk,uijjk,uijkk)
       implicit none
 
+      type(qva_nml_type), intent(in) :: qva_nml
       type(qva_cli_type), intent(in) :: qva_cli
       integer, intent(in) :: qumvia_qff   
       integer, intent(in) :: ndf                  ! Number of deg of freedm
@@ -481,10 +486,17 @@ contains
 #endif
          case (2)
 #ifdef qvalio
-         call seminumqff(nmodes,eig,dy,nqmatoms,nclatoms,&
+         if (qva_nml%nmselect==.false.) then
+            call seminumqff(nmodes,eig,dy,nqmatoms,nclatoms,&
                      &qmcoords,clcoords,at_numbers,ndf,nvdf,&
                      &hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,uiijj, &
                      &tijk,uiijk,uijjk,uijkk)
+         else
+            call seminumqff_nmsel(nmodes,eig,dy,nqmatoms,nclatoms,&
+                     &qmcoords,clcoords,at_numbers,ndf,nvdf,qva_nml%nunselnm,&
+                     &hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,uiijj, &
+                     &tijk,uiijk,uijjk,uijkk)
+         end if 
 #else
             write(77,'(A)') 'FATAL ERROR: qumvia_qff<3 is only valid '
             write(77,'(A)') 'for QUMVIA_LIO. '
@@ -628,7 +640,7 @@ contains
  
  !     QUARTIC FORCE FIELD
  !     ---------------------------------------------------------------
-       call selectqff(qva_cli,qumvia_qff,nmodes,eig,dy,nqmatoms,nclatoms,&
+       call selectqff(qva_cli,qva_nml,qumvia_qff,nmodes,eig,dy,nqmatoms,nclatoms,&
                       &qmcoords,clcoords,at_numbers,ndf,nvdf,&
                       &hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,uiijj,&
                       &tijk,uiijk,uijjk,uijkk)

@@ -2,6 +2,7 @@ module qva_global_module
    implicit none
 !  -----------------------------------------------------------
    type qva_nml_type
+     logical :: nmselect
      integer :: nhess
      real*8  :: vscf_gauswidth
      integer :: vci_qmax1
@@ -18,6 +19,7 @@ module qva_global_module
      integer :: nsinh
      integer :: hess_norder
      integer :: natharm
+     integer :: nunselnm
      real*8  :: csiterfactor
      real*8  :: ethresh
      real*8  :: resthresh
