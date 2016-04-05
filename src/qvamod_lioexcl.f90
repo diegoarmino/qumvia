@@ -1327,11 +1327,12 @@ contains
       end subroutine
  
 
-     subroutine hessian2(qmcoords,clcoords,nqmatoms,nclatoms,h,hess_norder,at_numbers,nmodes,eig,atnum_qmmm)
+     subroutine hessian2(qva_nml,qmcoords,clcoords,nqmatoms,nclatoms,h,hess_norder,at_numbers,nmodes,eig,atnum_qmmm)
 
       implicit none
 
 !     -------------------------------------------------------------------------
+      type(qva_nml_type),intent(in)  :: qva_nml
       real*8,  intent(in) :: qmcoords(3,nqmatoms) ! QM atom coordinates
       real*8,  intent(in) :: clcoords(4,nqmatoms) ! QM atom coordinates
       real*8,  intent(in) :: h                    ! Finite differences displacement factor.
@@ -1345,8 +1346,11 @@ contains
 !     LOCAL VARIABLES
 !      integer,parameter   :: nclatoms=0
 !      integer             :: ncoords              ! 3*nqmatoms
+      integer             :: ati,atii,atj,atjj,xi,xj
       integer             :: nat                  ! number of qm+mm atoms.
+      integer             :: nath                 ! number of qm+mm atoms.
       integer             :: ndf                  ! qm deg of freedom
+      integer             :: ndfh                 ! qm deg of freedom
       integer             :: ndfall               ! qm+mm deg of freedom
       integer             :: i,j,k,r,s,m
       real*8              :: dxyzcl(3,nclatoms)   ! SCF MM force
@@ -1366,7 +1370,6 @@ contains
       real*8              :: qmxyz(3,nqmatoms)
 !      real*8              :: clcoords(4,nqmatoms)
 
-      type(qva_nml_type), save     :: qva_nml
 
 !     Workspace for diagonalization. 
       character(len=117) :: format1
@@ -1375,8 +1378,10 @@ contains
       real*8,allocatable  :: eigall(:)      ! Hessian eigenvalues
       real*8,allocatable  :: sign_eigall(:)
       real*8,allocatable  :: freqall(:)
+      real*8,dimension(:,:,:),allocatable :: grad
+      integer,allocatable :: harmask(:)     ! List of atoms to include in harmonic analysis.
+
       real*8,  dimension(:), allocatable    :: WORK, WORK2
-      real*8,  dimension(:,:,:),allocatable :: grad
       integer, dimension(:), allocatable    :: IWORK, IWORK2
       integer :: LWORK, LIWORK, INFO
 
@@ -1395,11 +1400,36 @@ contains
       dxyzqm=0.0D0
       dxyzcl=0.0D0
       hess=0.0D0
+      do i=1,ndf
+         hess(i,i)=1.0d-08  ! For Partial Hessian Vibrational Analysis.
+      end do
       eig=0.0D0
       freq=0.0D0
       sign_eig=1.0D00
       at_masses=0.0D0
 
+!     Reading list of atoms to include in harmonic analysis using the partial hessian
+!     approach (see Li & Jensen Theor. Chem. Acc. 2002).
+      nath=qva_nml%natharm
+
+      if (nath < 0) then
+         ndfh = ndf
+         nath = nqmatoms
+         allocate(harmask(nath))
+         do i=1,nath
+            harmask(i)=i
+         end do
+      else
+         allocate(harmask(nath))
+         ndfh=nath * 3
+         read(qva_nml%harmask,*) harmask
+      end if
+
+      write(77,*) 'natharm = ',qva_nml%natharm
+      write(77,*) 'nath= ',nath
+      write(77,*) 'harmask = ',harmask
+      
+      
 !     Create a vector of inverse square-root masses corresponding to each 
 !     cartesian coordinate.
       do i=1,nqmatoms
@@ -1430,7 +1460,8 @@ contains
 !     Calculating gradients in displaced positions along the 
 !     QM coordinates.
 
-      do i=1,nqmatoms
+      do ati=1,nath
+         i=harmask(ati)
          do j=1,3
 
             k=3*(i-1)+j
@@ -1507,42 +1538,71 @@ contains
 
 
 !     Calculating elements of the Hessian and mass weighting.
+
       IF (hess_norder==1) THEN
 
-         do i=1,ndf
-             do j=i,ndf
-                tmp1=0d0
-                tmp2=0d0
-                hhi=hau/sqrt(at_masses(i))
-                hhj=hau/sqrt(at_masses(j))
-                if (i==j) then
-                   tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi    ! Finite difference.
-                   hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
-                else
-                   tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi
-                   tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/hhj
-                   hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
-                end if 
-             end do
-         end do
+         do ati=1,nath
+            atii=harmask(ati)
+            do xi=1,3
+               
+              do atj=ati,nath
+                atjj=harmask(atj)
+                do xj=1,3
+
+                   i=(atii-1)*3+xi
+                   j=(atjj-1)*3+xj
+
+                   tmp1=0d0
+                   tmp2=0d0
+                   hhi=hau/sqrt(at_masses(i))
+                   hhj=hau/sqrt(at_masses(j))
+
+                   if (i==j) then
+                      tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi    ! Finite difference.
+                      hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
+                   else
+                      tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi
+                      tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/hhj
+                      hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
+                   end if 
+
+                end do
+              end do
+
+            end do
+          end do
 
       ELSE
 
-         do i=1,ndf
-             do j=i,ndf
-                tmp1=0d0
-                tmp2=0d0
-                hhi=hau/sqrt(at_masses(i))
-                hhj=hau/sqrt(at_masses(j))
-                if (i==j) then
-                   tmp1=(grad(i,-2,j)+8d0*grad(i,1,j)-8d0*grad(i,-1,j)-grad(i,2,j))/(12d0*hhi)    ! Finite difference.
-                   hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
-                else
-                   tmp1=(grad(i,-2,j)+8d0*grad(i,1,j)-8d0*grad(i,-1,j)-grad(i,2,j))/(12d0*hhi)    ! Finite difference.
-                   tmp2=(grad(j,-2,i)+8d0*grad(j,1,i)-8d0*grad(j,-1,i)-grad(j,2,i))/(12d0*hhj)    ! Finite difference.
-                   hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
-                end if 
-             end do
+         do ati=1,nath
+            atii=harmask(ati)
+            do xi=1,3
+               
+              do atj=ati,nath
+                atjj=harmask(atj)
+                do xj=1,3
+
+                   i=(atii-1)*3+xi
+                   j=(atjj-1)*3+xj
+
+                   tmp1=0d0
+                   tmp2=0d0
+                   hhi=hau/sqrt(at_masses(i))
+                   hhj=hau/sqrt(at_masses(j))
+
+                   if (i==j) then
+                      tmp1=(grad(i,-2,j)+8d0*grad(i,1,j)-8d0*grad(i,-1,j)-grad(i,2,j))/(12d0*hhi)    ! Finite difference.
+                      hess(i,j)=tmp1/sqrt(at_masses(i)*at_masses(j))          ! Mass weighting hessian
+                   else
+                      tmp1=(grad(i,-2,j)+8d0*grad(i,1,j)-8d0*grad(i,-1,j)-grad(i,2,j))/(12d0*hhi)    ! Finite difference.
+                      tmp2=(grad(j,-2,i)+8d0*grad(j,1,i)-8d0*grad(j,-1,i)-grad(j,2,i))/(12d0*hhj)    ! Finite difference.
+                      hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
+                   end if 
+
+                 end do
+              end do
+
+            end do
          end do
 
       END IF
