@@ -1,26 +1,36 @@
-#PBS -S /bin/bash
+#!/bin/bash
+#
 #PBS -l walltime=12:00:00
-#PBS -l nodes=1:ppn=1:gpus=1:m2090
+#PBS -l nodes=1:ppn=1:gpus=1
 #PBS -N qvaliotest
 #PBS -o qvaliotest.out
 #PBS -m abe
 #PBS -M diegoarmino@gmail.com
 #PBS -q gpu
-#PBS -l pmem=4GB
+#PBS -l pmem=1024mb
 
+#module load intel/2016.0.109 openmpi cuda mkl/2016.0.109 gsl
+echo $PBS_O_WORKDIR
 cd $PBS_O_WORKDIR
-module load intel openmpi cuda mkl gsl
 
-export LIOHOME=${HOME}/progs/lio
-export QVA_HOME=${HOME}/dev/qumvia
-export PATH="${PATH}:${QVA_HOME}/bin"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${AMBERHOME}/lib:$GARCHAHOME/g2g:$GARCHAHOME/lioamber:$LIOHOME/g2g:$LIOHOME/lioamber:/opt/intel/composer_xe_2013_sp1.0.080/compiler/lib/intel64"
+#export LIOHOME=${HOME}/dev/lio
+#export LIO_HOME=${HOME}/dev/lio
+#export QVA_HOME=${HOME}/dev/qumvia
+#export PATH="${PATH}:${QVA_HOME}/bin"
+#export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${AMBERHOME}/lib:$GARCHAHOME/g2g:$GARCHAHOME/lioamber:$LIOHOME/g2g:$LIOHOME/lioamber:/opt/intel/composer_xe_2013_sp1.0.080/compiler/lib/intel64"
 
 echo Host = `hostname`
 echo Date = `date`
+
+unset CUDA_VISIBLE_DEVICES
+for gpu in `cat $PBS_GPUFILE | sed -e "s@.*-gpu@@g"`; do
+   export CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES,$gpu"
+done
+
 export PBS_GPUS=`gpus=; while read gpu ; do gpus="$gpus,$gpu"; done < $PBS_GPUFILE; echo $gpus | sed -e "s%^,%%"`
 
 MDEXE=$QVA_HOME/bin/qumvia.lio
 
-/usr/local/bin/pbsgpu-wrapper ${MDEXE} -i input.iqv -o test.oqv -c coordinates.cqv
+#/usr/local/bin/pbsgpu-wrapper ${MDEXE} -i input.iqv -o test.oqv -c coordinates.cqv
+${MDEXE} -i input.iqv -o test.oqv -c coordinates.cqv
 

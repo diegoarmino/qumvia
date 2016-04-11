@@ -8,11 +8,11 @@
 #PBS -l pmem=4GB
 
 cd $PBS_O_WORKDIR
-module load intel mkl gsl
+module load intel/2013 gsl
 
 export QVA_HOME=${HOME}/dev/qumvia
 export PATH="${PATH}:${QVA_HOME}/bin"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/opt/intel/composer_xe_2013_sp1.0.080/compiler/lib/intel64"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${MKLROOT}/lib/intel64"
 
 echo Host = `hostname`
 echo Date = `date`
