@@ -597,6 +597,7 @@ contains
 !        write(77,'(999D10.2)') hessp(i,:)
 !     end do
 
+<<<<<<< 55d00c246866e6d90d47f58b80ace662f2ae4a00
      return
 
      end subroutine
@@ -774,6 +775,8 @@ contains
 !        write(77,'(999D10.2)') hessp(i,:)
 !     end do
 
+=======
+>>>>>>> Added comments in rrintensities main subroutine
      return
 
      end subroutine
@@ -883,8 +886,34 @@ contains
       integer :: LWORK, LIWORK, INFO
 
 !     PARAMETERS
+<<<<<<< 55d00c246866e6d90d47f58b80ace662f2ae4a00
       real*8, PARAMETER :: h2cm=219475.64d0  ! Convert hartee/bohr^2/emu to cm-1
       real*8, PARAMETER :: freq2cm=5141.1182009496200901D0 ! Convert freq to cm-1
+=======
+!     -----------------------------------------------------------------------------------
+!     The following array contains all atomic masses ordered by atomic number,
+!     so that atomic_masses(<atomic_number>) -where <atomic_number> may be 1 to 18-
+!     returns the atomic mass corresponding to <atomic_number>.
+!     All masses correspond to the most abundant isotope and are in Daltons. Atomic
+!     masses for H, He, and O are obtanied from  Mohr, Taylor, Newell, Rev. Mod. Phys.
+!     80 (2008) 633-730. The rest are extracted from NIST:
+!     http://physics.nist.gov/cgi-bin/Compositions/stand_alone.pl.
+!     -----------------------------------------------------------------------------------
+      real*8, PARAMETER :: EMASS_CODATA08 = 0.0005485799111D0 ! Electron mass in Daltons (me * Na). The mass of 1 mol of electrons.
+      real*8, PARAMETER :: AMU_TO_AU = 1.0d0/EMASS_CODATA08   ! Conversion factor Da to AU
+      real*8, PARAMETER :: atomic_masses(18) =&
+          (/  1.00866491574D0, 4.002603254153D0,  7.016004D0,  9.012182D0, 11.009305D0, &
+             12.0D0,          14.0030740048D0,   15.99491461956D0, 18.998403D0,         &
+             19.992440D0,     22.989770D0,       23.985042D0,      26.981538D0,         &
+             27.976927D0,     30.973762D0,       31.972071D0,      34.968853D0,         &
+             39.962383D0 /)
+      real*8, PARAMETER :: atomic_masses_au(18) = atomic_masses * AMU_TO_AU
+      real*8, PARAMETER :: sqrt_atomic_masses_au(18) = SQRT(atomic_masses_au)
+      real*8, PARAMETER :: invsqrt_atomic_masses_au(18) = 1.0d0/SQRT(atomic_masses_au)
+      real*8, PARAMETER :: D1=1.0D00, D2=2.0D00
+      real*8, PARAMETER :: PI  =   D2*ACOS(0.0D00)      ! PI
+      real*8, PARAMETER :: h2cm=219475.64d0  ! Convert Hartree to cm-1
+>>>>>>> Added comments in rrintensities main subroutine
 
       include "qvmbia_param.f"
 !     -------------------------------------------------------------------------
@@ -1011,9 +1040,27 @@ contains
                 end do
                end do
 
+<<<<<<< 55d00c246866e6d90d47f58b80ace662f2ae4a00
             end if
 
          end do
+=======
+!     Create a vector of inverse square-root masses corresponding to each
+!     cartesian coordinate.
+      do i=1,nqmatoms
+          do j=1,3
+              k=at_numbers(i)
+              at_masses(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
+          end do
+      end do
+
+!     Calculating non diagonal elements of the Hessian
+      do i=1,ncoords
+          do j=i,ncoords
+              hess(i,j)=grad(i+1,j)-grad(1,j)+grad(j+1,i)-grad(1,i)
+              hess(i,j)=at_masses(i)*at_masses(j)*hessf*hess(i,j)
+          end do
+>>>>>>> Added comments in rrintensities main subroutine
       end do
       write(77,'(A)') 'FINISHED ALL GRADIENTS COMPUTATIONS, NOW COMPUTING HESSIAN'
 
@@ -1890,9 +1937,18 @@ contains
 
       subroutine rrintensities(lio_nml,qva_cli,qva_nml,nqmatoms)
 !     ------------------------------------------------------------------
-!     GENERATES GEOMETRIES FOR SEMINUMERICAL QFF USING HESSIANS
-!     TO BE COMPUTED USING AN EXTERNAL ELECTRONIC STRUCTURE SOFTWARE.
+!     COMPUTES RESONANT RAMAN INTENSITIES
+!
+!     Method based on the numerical diferentiation of polarizabilities obtained
+!     from RTTDDFT.
+!
+!     Following the paper by Thomas et. al. (2013)
+
+!     "Resonance Raman spectra of ortho-nitrophenol calculated by real-time
+!     time-dependent density functional theory." Thomas M, Latorre F,
+!     Marquetand P; JCP, 138,4:044101 (2013).
 !     ------------------------------------------------------------------
+
 !      use garcha_mod
       implicit none
 
@@ -1980,7 +2036,7 @@ contains
 !        ------------------------------------------------------------------
          call calc_uvvis(qvageom,qva_nml,lio_nml,nqmatoms)
          STOP
-      end if 
+      end if
 
 !     COMPUTING HARMONIC ANALYSIS
 !     ------------------------------------------------------------------
@@ -2015,7 +2071,7 @@ contains
       write(77,'(A)') 'COMPUTING DERIVATIVES WITH RESPECT TO NORMAL MODES'
       call derivate_alpha(poltens,dQ,dalpha,nvdf)
       if (rrdebug == 1) call print_derpoltens(dalpha,nvdf)
-      
+
 !     COMPUTE RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
       write(77,'(A)') 'COMPUTING RESONANT RAMAN ACTIVITIES'
@@ -2100,15 +2156,15 @@ contains
 
 !     We define the step size acording to J.Chem.Phys 121:1383
 !     Using a dimensionless reduced coordinate y=sqrt(omega_i/hbar)Qi
-!     where omega_i is the freq of mode i and Qi is normal coordinate 
+!     where omega_i is the freq of mode i and Qi is normal coordinate
 !     of mode i. Then the step size dQi is given by
 !
 !                    dQi = dy/sqrt(omega_i)
 !
-!     Where omega_i = Sqrt(Ki/mi) in atomic units (hbar=1). 
+!     Where omega_i = Sqrt(Ki/mi) in atomic units (hbar=1).
 !     dy is arbitrary and set to 0.5 by default.
 !     To obtain the displacement vector in cartesian coordinates dXi
-!                  
+!
 !                   dXi = M^(-1) * Li * dQi
 !
 !     Where M^(-1) is the inverse mass weights matrix diag(1/Sqrt(mi))
@@ -2153,10 +2209,10 @@ contains
 !-----------------------------------------------------------------------
 !     GENERATING STENCIL GEOMETRIES
 !-----------------------------------------------------------------------
-!     Converting units from Angstroms to Bohrs. 
+!     Converting units from Angstroms to Bohrs.
       X0=qvageom/bohr2ang
 
-!     Calculating displaced coordinates and energy at 2 grid points 
+!     Calculating displaced coordinates and energy at 2 grid points
 !     along each normal mode.
       dd=(/-1,1/)
       write(77,'(A)') 'LABELS FOR 1d STENCIL POINTS'
@@ -2256,7 +2312,7 @@ contains
                Fy=fxyz(i,2)
                Fz=fxyz(i,3)
 
-               call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)   
+               call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)
             end do
 >>>>>>> Added feature: Resonant Raman intensities
 !           ------------------------------------------------------------
@@ -2356,7 +2412,7 @@ contains
          real*8              :: Emod
          real*8              :: escf
          real*8              :: clcoords(4,nclatoms)
-         real*8              :: dipxyz(3) 
+         real*8              :: dipxyz(3)
          real*8              :: lambda
          integer             :: ierr
          integer             :: i
@@ -2377,7 +2433,7 @@ contains
                Fy=fxyz(i,2)
                Fz=fxyz(i,3)
 
-               call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)   
+               call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)
             end do
          end if
 
@@ -2413,7 +2469,7 @@ contains
          real*8                   :: freq(nvdf)
          real*8, PARAMETER        :: h2cm=219475.64d0 !Convert Hartree to cm-1
 !        --------------------------------------------------------------
-         
+
          write(77,'(A)')
          write(77,'(A)') ' --------------------------------------------  '
          write(77,'(A)') '         HARMONIC FREQUENCIES AND              '
@@ -2464,7 +2520,7 @@ contains
          end do
 
       end subroutine
-     
+
       subroutine derivate_alpha(alpha,dQ,dalpha,nvdf)
 
          implicit none
@@ -2501,11 +2557,11 @@ contains
          real*8,intent(out)       :: poltens(nvdf,2,3,3) ! Polarizability tensors
 
          real*8       :: nu
-         real*8       :: t 
+         real*8       :: t
          real*8       :: tss
-         real*8       :: ene 
+         real*8       :: ene
          real*8       :: damps
-         real*8       :: pi 
+         real*8       :: pi
          real*8       :: lambda
          real*8       :: ftix,ftiy,ftiz
          real*8       :: ftrx,ftry,ftrz
@@ -2605,7 +2661,7 @@ contains
          close(unit=90)
          close(unit=91)
 
-      end subroutine 
+      end subroutine
 
       subroutine uvtdanalyze(ns,ts,lmin,lmax,damp,nvdf,Emod,spec)
          implicit none
@@ -2621,11 +2677,11 @@ contains
          real*8,intent(out)       :: spec(ns) ! Polarizability tensors
 
          real*8       :: nu
-         real*8       :: t 
+         real*8       :: t
          real*8       :: tss
-         real*8       :: ene 
+         real*8       :: ene
          real*8       :: damps
-         real*8       :: pi 
+         real*8       :: pi
          real*8       :: lambda
          real*8       :: ftix,ftiy,ftiz
          real*8       :: ftrx,ftry,ftrz
@@ -2713,7 +2769,7 @@ contains
         ftr = ftr/(2d0*pi*nu)
         fti = fti/(2d0*pi*nu)
 
-      end subroutine 
+      end subroutine
 
 
 end module qvamod_lioexcl
