@@ -2084,10 +2084,12 @@ contains
 
       subroutine calc_stencil_td(lio_nml,qva_nml,qva_cli,nqmatoms,qvageom,at_numbers,hii)
 !     ------------------------------------------------------------------
-!     GENERATES GEOMETRIES FOR SEMINUMERICAL QFF USING HESSIANS
-!     TO BE COMPUTED USING AN EXTERNAL ELECTRONIC STRUCTURE SOFTWARE.
+!     GENERATES GEOMETRIES FOR NUMERICAL DIFERENTIATION OF
+!     POLARIZABILITIES.
 !     ------------------------------------------------------------------
       use garcha_mod
+      use field_data, only: fx, fy, fz
+      use td_data, only: timedep
       implicit none
 
       type(lio_nml_type), intent(in) :: lio_nml
@@ -2171,8 +2173,7 @@ contains
 
 
       write(77,'(A)')'-----------------------------------------------'
-      write(77,'(A)')'   GENERATING GEOMETRIES FOR QFF COMPUTATION   '
-      write(77,'(A)')'          USING ANALYTICAL HESSIANS            '
+      write(77,'(A)')'   GENERATING GEOMETRIES FOR TD COMPUTATION    '
       write(77,'(A)')'-----------------------------------------------'
 
       omega = Sqrt(hii)
@@ -2194,6 +2195,7 @@ contains
          end do
       end do
 
+<<<<<<< 068bf7308f511d710bb7c30ac3304f0b890f6528
 <<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 !     ------------------------------------------------------------------
 !     DEBUG
@@ -2205,6 +2207,9 @@ contains
 =======
       write(77,*) 'BEFORE QVAGEOM'
 >>>>>>> Added feature: Resonant Raman intensities
+=======
+      ! write(77,*) 'BEFORE QVAGEOM'
+>>>>>>> Made changes to fix compatibility issues between qumvia and lio 2018. Addedsome module calls to td_data and fields_data in order to correct them.
 !-----------------------------------------------------------------------
 !     GENERATING STENCIL GEOMETRIES
 !-----------------------------------------------------------------------
@@ -2233,15 +2238,17 @@ contains
 
       write(77,'(A)') 'DISPLACEMENT VECTORS (dX) (ANGS)'
       step=1
-      do nm=1,nvdf
-         do j=1,2
-            do k=1,nqmatoms
-               do ii=1,3
+      do nm=1,nvdf                        ! Outer loop:
+         do j=1,2                         ! Controls stencil.
+
+            do k=1,nqmatoms                  ! Inner loop defines the moving vector
+               do ii=1,3                     ! along the normal mode
                   p = 3*(k-1)+ii
                   dX(ii,k) = Minv(p)*L(p,nm)*dQ(nm)   ! Scaling/Mass unweighting
                end do
             end do
-            Xm = X0 + dd(j)*dX  ! Displacing along nmode
+
+            Xm = X0 + dd(j)*dX        ! Displacing along nmode
             Xm=Xm*bohr2ang            ! BACK TO ANGSTROMS
 
 !           ------------------------------------------------------------
@@ -2302,10 +2309,11 @@ contains
 =======
 !           TIME DEPENDENT CALCULATION
             timedep = 1
-            fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)
-            fxyz(2,:)=(/0d0,qva_nml%rri_fxyz,0d0/)
+            fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)  ! Defining electric field
+            fxyz(2,:)=(/0d0,qva_nml%rri_fxyz,0d0/)  ! vectors for TD
             fxyz(3,:)=(/0d0,0d0,qva_nml%rri_fxyz/)
 
+            ! This loop generates a TD calculation for Ex Ey and Ez separatedly.
             do i=1,3
                Fx=fxyz(i,1)
                Fy=fxyz(i,2)
@@ -2395,6 +2403,8 @@ contains
 
       subroutine calc_uvvis(qvageom,qva_nml,lio_nml,nqmatoms)
          use garcha_mod
+         use field_data, only: fx, fy, fz
+         use td_data, only: timedep
          implicit none
 !        --------------------------------------------------------------
          type(lio_nml_type), intent(in) :: lio_nml
@@ -2428,9 +2438,9 @@ contains
 
          if (qva_nml%readtd == 0) then
             do i=1,3
-               Fx=fxyz(i,1)
-               Fy=fxyz(i,2)
-               Fz=fxyz(i,3)
+               fx=fxyz(i,1)
+               fy=fxyz(i,2)
+               fz=fxyz(i,3)
 
                call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)
             end do
@@ -2535,7 +2545,7 @@ contains
          do nm=1,nvdf
             do i=1,3
                do j=1,3
-                  dalpha(nm,i,j)=10*(alpha(nm,2,i,j)-alpha(nm,1,i,j))*0.5d0/dQ(nm)
+                  dalpha(nm,i,j)=10d0*(alpha(nm,2,i,j)-alpha(nm,1,i,j))*0.5d0/dQ(nm)
                   ! DANGER: FACTOR OF 10 TO CONVERT A TO NM IN NMODE.
                end do
             end do
