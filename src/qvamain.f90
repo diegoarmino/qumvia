@@ -51,8 +51,12 @@ program qumvia_main
    use qvamod_lio
    use qvamod_lioexcl
    use garcha_mod, only: natom, nsol, Iz, basis_set, fitting_set, &
+<<<<<<< 051c8b61ddff49304b1b5961e38862852fe6bde0
                          int_basis, omit_bas, verbose, writeforces,&
                          r, rqm
+=======
+                         int_basis, omit_bas, verbose, writeforces
+>>>>>>> In the process of fixing qumvia/lio interface. Interface is, as of now, broken.
 #endif
    use qvamod_common
    use M_kracken
@@ -63,8 +67,14 @@ program qumvia_main
    type(qva_cli_type), save  :: qva_cli
    type(qva_nml_type), save  :: qva_nml
 #ifdef qvalio
+<<<<<<< 051c8b61ddff49304b1b5961e38862852fe6bde0
    integer   :: nclatoms, qmcharge
+=======
+   integer   :: nclatoms
+   integer   :: qmcharge
+>>>>>>> In the process of fixing qumvia/lio interface. Interface is, as of now, broken.
    integer, allocatable :: at_numbers(:)
+   integer, dimension (:), allocatable :: Iz(:)
    real*8, allocatable :: qvageom(:,:)
    type(lio_nml_type), save  :: lio_nml
    double precision :: a0  =   0.5291771D00         ! bohr radius
@@ -122,7 +132,9 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 #ifdef qvalio
 !  Read geometry file.
    allocate(at_numbers(nqmatoms),qvageom(3,nqmatoms))
+   call lio_defaults()
    call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
+<<<<<<< 051c8b61ddff49304b1b5961e38862852fe6bde0
 
    call lio_defaults()
    call read_options(qva_cli%inp,qmcharge)
@@ -132,6 +144,25 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
    call print_lio_nml(lio_nml)
    call init_lio_common(nqmatoms,at_numbers,nsol,qmcharge,0)
 
+=======
+   call read_options(qva_cli%inp,qmcharge)
+   call init_lio_common(nqmatoms,Iz,nsol,qmcharge,0)
+   call get_lio_nml(qva_cli%inp,lio_nml)
+!   call print_lio_nml(lio_nml)
+!
+!   call init_lio_amber(nqmatoms,at_numbers,nclatoms, &
+!      lio_nml%qmcharge, lio_nml%basis, lio_nml%output, lio_nml%fcoord, &
+!      lio_nml%fmulliken, lio_nml%frestart, lio_nml%frestartin, &
+!      lio_nml%verbose, lio_nml%OPEN, lio_nml%NMAX, lio_nml%NUNP, &
+!      lio_nml%VCINP, lio_nml%GOLD, lio_nml%told, lio_nml%rmax, &
+!      lio_nml%rmaxs, lio_nml%predcoef, lio_nml%idip, lio_nml%writexyz, &
+!      lio_nml%intsoldouble, lio_nml%DIIS, lio_nml%ndiis, lio_nml%dgtrig, &
+!      lio_nml%Iexch, lio_nml%integ, lio_nml%DENS, lio_nml%IGRID, &
+!      lio_nml%IGRID2, lio_nml%timedep, lio_nml%tdstep, lio_nml%ntdstep, &
+!      lio_nml%field, lio_nml%exter, lio_nml%a0, lio_nml%epsilon, &
+!      lio_nml%Fx, lio_nml%Fy, lio_nml%Fz, lio_nml%NBCH, &
+!      lio_nml%propagator, lio_nml%writedens, lio_nml%tdrestart)
+>>>>>>> In the process of fixing qumvia/lio interface. Interface is, as of now, broken.
    deallocate(at_numbers,qvageom)
 #endif
 !   close(unit=10)
@@ -157,6 +188,7 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 
 !     COMPUTE HARMONIC SPECTRA WITH RESONANT RAMAN INTENSITIES.
       call rrintensities(lio_nml,qva_cli,qva_nml,nqmatoms)
+      call lio_finalize()
       STOP
 #endif
 
