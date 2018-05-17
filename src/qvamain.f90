@@ -1,26 +1,26 @@
 program qumvia_main
 
 ! ----------------------------------------------------------------
-! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  
-!        
-!                        WELCOME TO 
-!        
+! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
+!
+!                        WELCOME TO
+!
 !  .d8888b. 0000 0000  .00..00. .00. 0000  000 00000   d888b
 ! d88P^ Y88b 888  888 `88bP"b8bP"88b  888  888  888   d88 88b
 ! 888    888 888  888  888  888  888  888  888  888   888 888
 ! Y88b..d88P 888  888  888  888  888  Y88bd88Y  888   888o888
 !  Y888888P  'V8V"V8P o888 o888 o888    Y88Y   00000 o888 888o
-!    `Yp.  
-!        
+!    `Yp.
+!
 !                A VSCF/VCI IMPLEMENTATION
-!                            by 
+!                            by
 !               Diego Javier Alonso de Armino
 !                   diegoarmino@gmail.com
 !
 !
 ! QUantum Mechanical VIbratioal Anlalysis or QUMVIA, for short, is
 ! an original implementation of Vibrational Self-consistent Field
-! (VSCF) and Vibrational Configuration Interaction (VCI) using 
+! (VSCF) and Vibrational Configuration Interaction (VCI) using
 ! distributed gaussian basis set with analytical integrals and a
 ! configuration selection algorithm.
 !
@@ -42,7 +42,7 @@ program qumvia_main
 ! A copy of the licence can be found in the root directory of
 ! QUMVIA.  If not, see <http://www.gnu.org/licenses/>.
 !
-! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  
+! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 ! ----------------------------------------------------------------
 
 #ifdef qvacpu
@@ -67,7 +67,7 @@ program qumvia_main
 #endif
 
 !  PARSING COMMAND LINE ARGUMENTS
-!  The parsing (and only the parsing) is performed using M_kracken 
+!  The parsing (and only the parsing) is performed using M_kracken
 !  module from John S. Urban.
 !  Copyright(C) 1989,1996,2013 John S. Urban   all rights reserved
 !  http://home.comcast.net/~urbanjost/LIBRARY/libCLI/arguments/krackenhelp.html
@@ -118,28 +118,23 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 !  Read geometry file.
    allocate(at_numbers(nqmatoms),qvageom(3,nqmatoms))
    call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
+
+   call lio_defaults()
+   call read_options(qva_cli%inp,qmcharge)
+   Iz = at_numbers
+   r  = qvageom
+   rqm= qvageom
    call get_lio_nml(qva_cli%inp,lio_nml)
    call print_lio_nml(lio_nml)
+   call init_lio_common(nqmatoms,at_numbers,nsol,qmcharge,0)
 
-   call init_lio_amber(nqmatoms,at_numbers,nclatoms, &
-      lio_nml%qmcharge, lio_nml%basis, lio_nml%output, lio_nml%fcoord, &
-      lio_nml%fmulliken, lio_nml%frestart, lio_nml%frestartin, &
-      lio_nml%verbose, lio_nml%OPEN, lio_nml%NMAX, lio_nml%NUNP, &
-      lio_nml%VCINP, lio_nml%GOLD, lio_nml%told, lio_nml%rmax, &
-      lio_nml%rmaxs, lio_nml%predcoef, lio_nml%idip, lio_nml%writexyz, &
-      lio_nml%intsoldouble, lio_nml%DIIS, lio_nml%ndiis, lio_nml%dgtrig, &
-      lio_nml%Iexch, lio_nml%integ, lio_nml%DENS, lio_nml%IGRID, &
-      lio_nml%IGRID2, lio_nml%timedep, lio_nml%tdstep, lio_nml%ntdstep, &
-      lio_nml%field, lio_nml%exter, lio_nml%a0, lio_nml%epsilon, &
-      lio_nml%Fx, lio_nml%Fy, lio_nml%Fz, lio_nml%NBCH, &
-      lio_nml%propagator, lio_nml%writedens, lio_nml%tdrestart)
    deallocate(at_numbers,qvageom)
 #endif
 !   close(unit=10)
 
    IF (qva_nml%nhess .eq. 1) THEN
 
-!     STATE-SPECIFIC VSCF / CONFIGURATION SELECTION VCI           
+!     STATE-SPECIFIC VSCF / CONFIGURATION SELECTION VCI
       call run_vscfvci(qva_cli,qva_nml,nqmatoms)
 #ifdef qvalio
       call lio_finalize()
@@ -156,4 +151,3 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
    END IF
 
 end program qumvia_main
-
