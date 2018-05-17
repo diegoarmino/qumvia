@@ -50,6 +50,9 @@ program qumvia_main
 #else
    use qvamod_lio
    use qvamod_lioexcl
+   use garcha_mod, only: natom, nsol, Iz, basis_set, fitting_set, &
+                         int_basis, omit_bas, verbose, writeforces,&
+                         r, rqm
 #endif
    use qvamod_common
    use M_kracken
