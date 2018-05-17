@@ -51,12 +51,17 @@ program qumvia_main
    use qvamod_lio
    use qvamod_lioexcl
    use garcha_mod, only: natom, nsol, Iz, basis_set, fitting_set, &
+<<<<<<< 4e69ba7e2d5240265cd90d98ec9b794eb73bd52a
 <<<<<<< 051c8b61ddff49304b1b5961e38862852fe6bde0
                          int_basis, omit_bas, verbose, writeforces,&
                          r, rqm
 =======
                          int_basis, omit_bas, verbose, writeforces
 >>>>>>> In the process of fixing qumvia/lio interface. Interface is, as of now, broken.
+=======
+                         int_basis, omit_bas, verbose, writeforces,&
+                         r, rqm
+>>>>>>> Elimine el clean obligatorio y cositas menores en main
 #endif
    use qvamod_common
    use M_kracken
@@ -74,7 +79,6 @@ program qumvia_main
    integer   :: qmcharge
 >>>>>>> In the process of fixing qumvia/lio interface. Interface is, as of now, broken.
    integer, allocatable :: at_numbers(:)
-   integer, dimension (:), allocatable :: Iz(:)
    real*8, allocatable :: qvageom(:,:)
    type(lio_nml_type), save  :: lio_nml
    double precision :: a0  =   0.5291771D00         ! bohr radius
@@ -134,6 +138,7 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
    allocate(at_numbers(nqmatoms),qvageom(3,nqmatoms))
    call lio_defaults()
    call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
+<<<<<<< 4e69ba7e2d5240265cd90d98ec9b794eb73bd52a
 <<<<<<< 051c8b61ddff49304b1b5961e38862852fe6bde0
 
    call lio_defaults()
@@ -145,10 +150,18 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
    call init_lio_common(nqmatoms,at_numbers,nsol,qmcharge,0)
 
 =======
+=======
+   write(*,*) "before read_options"
+>>>>>>> Elimine el clean obligatorio y cositas menores en main
    call read_options(qva_cli%inp,qmcharge)
-   call init_lio_common(nqmatoms,Iz,nsol,qmcharge,0)
+   write(*,*) "before init_lio_common"
+   Iz = at_numbers
+   r  = qvageom
+   rqm= qvageom
+   call init_lio_common(nqmatoms,at_numbers,nsol,qmcharge,0)
+   write(*,*) "before get_lio_nml"
    call get_lio_nml(qva_cli%inp,lio_nml)
-!   call print_lio_nml(lio_nml)
+   call print_lio_nml(lio_nml)
 !
 !   call init_lio_amber(nqmatoms,at_numbers,nclatoms, &
 !      lio_nml%qmcharge, lio_nml%basis, lio_nml%output, lio_nml%fcoord, &
