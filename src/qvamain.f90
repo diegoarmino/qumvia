@@ -63,7 +63,7 @@ program qumvia_main
    type(qva_cli_type), save  :: qva_cli
    type(qva_nml_type), save  :: qva_nml
 #ifdef qvalio
-   integer   :: nclatoms
+   integer   :: nclatoms, qmcharge
    integer, allocatable :: at_numbers(:)
    real*8, allocatable :: qvageom(:,:)
    type(lio_nml_type), save  :: lio_nml

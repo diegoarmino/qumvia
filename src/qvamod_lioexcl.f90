@@ -1,11 +1,11 @@
 module qvamod_lioexcl
 
 ! ----------------------------------------------------------------
-! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  
+! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 !
 ! QUantum Mechanical VIbratioal Anlalysis or QUMVIA, for short, is
 ! an original implementation of Vibrational Self-consistent Field
-! (VSCF) and Vibrational Configuration Interaction (VCI) using 
+! (VSCF) and Vibrational Configuration Interaction (VCI) using
 ! distributed gaussian basis set with analytical integrals and a
 ! configuration selection algorithm.
 !
@@ -27,7 +27,7 @@ module qvamod_lioexcl
 ! A copy of the licence can be found in the root directory of
 ! QUMVIA.  If not, see <http://www.gnu.org/licenses/>.
 !
-! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  
+! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 ! ----------------------------------------------------------------
 
    use qvamod_common
@@ -93,7 +93,7 @@ contains
 
      subroutine get_lio_nml(qvain,lio_nml)
         implicit none
-     
+
         character(99),intent(in)        :: qvain
         type(lio_nml_type), intent(out) :: lio_nml
 
@@ -147,10 +147,10 @@ contains
         Iexch,integ,dens,igrid,igrid2,timedep, tdstep, ntdstep, &
         propagator,NBCH, writedens, tdrestart, &
         field,exter,a0,epsilon,Fx,Fy,Fz,qmcharge
-   
+
         integer :: ifind, ierr
         !defaults
-   
+
         basis='basis'  ! name of the base file
         output='output'
         fcoord='qm.xyz'
@@ -193,7 +193,7 @@ contains
         writedens=.true.
         tdrestart=.false.
         qmcharge=0
-   
+
         ! Read namelist
 !        open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
 !        if (ierr /= 0) then
@@ -203,7 +203,7 @@ contains
 
         rewind 10
         read(10,nml=lio,iostat=ierr)
-   
+
         if ( ierr > 0 ) then
            write(*,'(A)') 'LIO NAMELIST READ ERROR'
         else if ( ierr < 0 ) then
@@ -215,8 +215,8 @@ contains
            write(*,*) 'ERROR CLOSING LIO NAMELIST'
            STOP
         end if
-   
-   
+
+
         lio_nml%basis=basis
         lio_nml%output=output
         lio_nml%fcoord=fcoord
@@ -260,11 +260,11 @@ contains
         lio_nml%tdrestart=tdrestart
         lio_nml%qmcharge=qmcharge
      end subroutine get_lio_nml
- 
+
      subroutine print_lio_nml(lio_nml)
         implicit none
         type(lio_nml_type), intent(in) :: lio_nml
- 
+
         write(77,'(A)') ' LIO NAMELIST PARAMETERS '
         write(77,'(A)') ' ----------------------- '
         write(77,*)      '  OPEN ', lio_nml%OPEN
@@ -302,7 +302,7 @@ contains
            write(77,*)     '  writedens ', lio_nml%writedens
            write(77,*)     '  writedens ', lio_nml%tdrestart
         endif
-      
+
      end subroutine print_lio_nml
 
 
@@ -364,7 +364,7 @@ contains
      X0=qmcoords/a0
 !     write(77,'(A)') 'CONVERSION FACTOR a0 -> Angs'
 !     write(77,'(D12.3)') a0
-      
+
 !    Computing total mass and atomic mass array.
      totM=0.0d0
      do i=1,nqmatoms
@@ -419,7 +419,7 @@ contains
 !     end do
 
 !    Invert moment of inertia matrix.
-!    We first handle cases with zeroes 
+!    We first handle cases with zeroes
      atmp = Itsr(1,1)*Itsr(2,2)*Itsr(3,3)
      if (abs(atmp) < cutoff) then
         cnt=0
@@ -499,7 +499,7 @@ contains
 !                       if (levic(ia,ib,ig)==0) CYCLE
                        do ja=1,3
                           do jb=1,3
-!                          if (levic(ja,jb,jg)==0) CYCLE 
+!                          if (levic(ja,jb,jg)==0) CYCLE
                              summ=summ+levic(ia,ib,ig)*levic(ja,jb,jg) &
                                   & *Itsr(ia,ja)*X0(ib,iat)*X0(jb,jat)
                           end do
@@ -553,7 +553,7 @@ contains
 !     do i=1,ndf
 !        write(77,'(999D10.2)') hessp(i,:)
 !     end do
-    
+
      return
 
      end subroutine
@@ -607,7 +607,7 @@ contains
      X0=qmcoords/a0
 !     write(77,'(A)') 'CONVERSION FACTOR a0 -> Angs'
 !     write(77,'(D12.3)') a0
-      
+
 !    Computing total mass and atomic mass array and center of mass.
      totM=0.0d0
      do i=1,nqmatoms
@@ -660,10 +660,10 @@ contains
 
 
 !    WE NOW COMPUTE THE PROJECTOR MATRIX P
-!    THE FORMULA CAN BE FOUND IN 
+!    THE FORMULA CAN BE FOUND IN
 !    Szalay, JCP 140:234107, (2014), eq 9, and eq. 17
 !    Note that although eq. 12 is only an orthonormalized version of
-!    eq. 9. Also, we only implemented Eckart conditions. Sayvetz 
+!    eq. 9. Also, we only implemented Eckart conditions. Sayvetz
 !    conditions are left for another time.
 
 !    Also, the following paper may be of interest.
@@ -697,7 +697,7 @@ contains
 
 !    Building projection matrix by external product of TRmat.
      call dgemm('n','t',ndf,ndf,6,1d0,TRmat,ndf,TRmat,ndf,0d0,P,ndf)
-     
+
      P=-P
      do i=1,ndf
         P(i,i) = 1.0d0 + P(i,i)
@@ -730,7 +730,7 @@ contains
 !     do i=1,ndf
 !        write(77,'(999D10.2)') hessp(i,:)
 !     end do
-    
+
      return
 
      end subroutine
@@ -747,21 +747,21 @@ contains
         crossp(1) = v1(2)*v2(3)-v1(3)*v2(2)
         crossp(2) = v1(3)*v2(1)-v1(1)*v2(3)
         crossp(3) = v1(1)*v2(2)-v1(2)*v2(1)
-       
+
         return
      end function crossp
 
- 
+
      subroutine fixphase(hess,qmcoords,ndf,nqmatoms)
-!    ------------------------------------------------------------------------ 
-!    FIXES THE PHASE OF THE EIGENVECTORS OF THE HESSIAN BY COMPUTING THE 
-!    DOT PRODUCT BETWEEN THESE AND THE INITIAL GEOMETRY, WHICH PROVIDE 
-!    A FIXED REFERENCE. IF THE DOT PRODUCT IS NEGATIVE, THE SIGN OF THE 
+!    ------------------------------------------------------------------------
+!    FIXES THE PHASE OF THE EIGENVECTORS OF THE HESSIAN BY COMPUTING THE
+!    DOT PRODUCT BETWEEN THESE AND THE INITIAL GEOMETRY, WHICH PROVIDE
+!    A FIXED REFERENCE. IF THE DOT PRODUCT IS NEGATIVE, THE SIGN OF THE
 !    EIGENVECTOR IS CHANGED.
-!    ------------------------------------------------------------------------ 
+!    ------------------------------------------------------------------------
 
      implicit none
-!    ------------------------------------------------------------------------ 
+!    ------------------------------------------------------------------------
      integer,intent(in)   :: ndf
      integer,intent(in)   :: nqmatoms
      real*8,intent(in)    :: qmcoords(3,ndf)
@@ -775,14 +775,14 @@ contains
      real*8        :: X0(ndf)
 !    External functions
      real*8,external :: ddot
-!    ------------------------------------------------------------------------ 
+!    ------------------------------------------------------------------------
 
      do at=1,nqmatoms
         do x=1,3
            X0(3*(at-1)+x) = qmcoords(x,at)
-        end do 
+        end do
      end do
-     
+
      do a=1,ndf
         vec = 0d0
         prod = 0d0
@@ -831,7 +831,7 @@ contains
 
       type(qva_nml_type), save     :: qva_nml
 
-!     Workspace for diagonalization. 
+!     Workspace for diagonalization.
       character(len=117) :: format1
       character(len=117) :: format2
       real*8,  dimension(:), allocatable    :: WORK, WORK2
@@ -857,7 +857,7 @@ contains
       sign_eig=1.0D00
       at_masses=0.0D0
 
-!     Create a vector of inverse square-root masses corresponding to each 
+!     Create a vector of inverse square-root masses corresponding to each
 !     cartesian coordinate.
       do i=1,nqmatoms
          do j=1,3
@@ -884,7 +884,7 @@ contains
          end do
       end do
 
-!     Calculating gradients in displaced positions along the 
+!     Calculating gradients in displaced positions along the
 !     QM coordinates.
 
       do i=1,nqmatoms
@@ -894,9 +894,9 @@ contains
 
 !           NOTE:
 !           qmxyz must be in Angstroms. It will be later transfromed into AU in SCF_in.
-!           The displacement factor h has units of Angs*amu^1/2, so in order to use it 
-!           for simple cartesians in Angs we must divide by sqrt(mi), with mi the mass 
-!           of the atom being displaced. In this way heavy atoms are less displaced than 
+!           The displacement factor h has units of Angs*amu^1/2, so in order to use it
+!           for simple cartesians in Angs we must divide by sqrt(mi), with mi the mass
+!           of the atom being displaced. In this way heavy atoms are less displaced than
 !           light atoms, and the numerical differentiation should be better balanced.
 
 !           Forward displacement
@@ -979,7 +979,8 @@ contains
                    tmp1=(grad(i,1,j)-grad(i,-1,j))*0.5d0/hhi
                    tmp2=(grad(j,1,i)-grad(j,-1,i))*0.5d0/hhj
                    hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
-                end if 
+                   hess(j,i)=hess(i,j)
+                end if
              end do
          end do
 
@@ -998,7 +999,8 @@ contains
                    tmp1=(grad(i,-2,j)+8d0*grad(i,1,j)-8d0*grad(i,-1,j)-grad(i,2,j))/(12d0*hhi)    ! Finite difference.
                    tmp2=(grad(j,-2,i)+8d0*grad(j,1,i)-8d0*grad(j,-1,i)-grad(j,2,i))/(12d0*hhj)    ! Finite difference.
                    hess(i,j)=(tmp1+tmp2)*0.5d0/sqrt(at_masses(i)*at_masses(j))
-                end if 
+                   hess(j,i)=hess(i,j)
+                end if
              end do
          end do
 
@@ -1045,13 +1047,13 @@ contains
       format1="(9999F9.2)"
       format2="(9999D11.3)"
 !     Write eigenvector and eigenvalues to file
-      write(77,*) 
+      write(77,*)
       write(77,*) '     VIBRATIONAL FREQUENCIES WITHOUT ECKART CONDITIONS'
       write(77,*) '     -------------------------------------------------'
-      write(77,*) 
+      write(77,*)
       write(77,format1) freq
-      write(77,*) 
-      write(77,*) 
+      write(77,*)
+      write(77,*)
 
       hess = hessp
 
@@ -1087,7 +1089,7 @@ contains
       write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
       write(77,*) '     VIBRATIONAL RESULTS WITH ECKART CONDITIONS'
       write(77,*) '     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
-      write(77,*) 
+      write(77,*)
       write(77,*) ' LIST OF FREQUENCIES (CM-1)'
       write(77,format1) freq
       write(77,*)
@@ -1116,7 +1118,7 @@ contains
 
       return
       end subroutine
- 
+
 
 
 
@@ -1126,7 +1128,7 @@ contains
 !######################################################################
 !     FORCE FIELD CALCULATION
 !######################################################################
-      
+
 
 
       subroutine fullnumqff(nmodes,eig,dy,nqmatoms,nclatoms,qmcoords,clcoords,&
@@ -1185,7 +1187,7 @@ contains
       integer             :: grti(8)
       integer             :: grtj(8)
       integer             :: grtk(8)
-    
+
       include "qvmbia_param.f"
 !     Eliminating rotational and translational degrees of freedom.
       do nm=7,ndf
@@ -1195,15 +1197,15 @@ contains
 
 !     We define the step size acording to J.Chem.Phys 121:1383
 !     Using a dimensionless reduced coordinate y=sqrt(omega_i/hbar)Qi
-!     where omega_i is the freq of mode i and Qi is normal coordinate 
+!     where omega_i is the freq of mode i and Qi is normal coordinate
 !     of mode i. Then the step size dQi is given by
 !
 !                    dQi = dy/sqrt(omega_i)
 !
-!     Where omega_i = Sqrt(Ki/mi) in atomic units (hbar=1). 
+!     Where omega_i = Sqrt(Ki/mi) in atomic units (hbar=1).
 !     dy is arbitrary and set to 0.5 by default.
 !     To obtain the displacement vector in cartesian coordinates dXi
-!                  
+!
 !                   dXi = M^(-1) * Li * dQi
 !
 !     Where M^(-1) is the inverse mass weights matrix diag(1/Sqrt(mi))
@@ -1219,7 +1221,7 @@ contains
 
 !     Converting units from Angstroms to Bohrs. We work in Bohrs.
 !     Convert back to Angstroms before calling SCF_in
-      X0=qmcoords/a0 
+      X0=qmcoords/a0
 
 !     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
       do i=1,nqmatoms
@@ -1232,7 +1234,7 @@ contains
 !-----------------------------------------------------------------------
 !     DIAGONAL QFF TERMS
 !-----------------------------------------------------------------------
-!     Calculating displaced coordinates and energy at 6 grid points 
+!     Calculating displaced coordinates and energy at 6 grid points
 !     along each normal mode.
       dd=(/-3,-2,-1,1,2,3/)
       tiii=0.0d0
@@ -1261,13 +1263,13 @@ contains
          uiiii(nm)=V1(5,nm)-4.0D0*V1(4,nm)+6.0D0*V0-4.0D0*V1(3,nm)+V1(2,nm)
          uiiii(nm)=uiiii(nm)/dQ(nm)**4
       end do
-      
+
 !-----------------------------------------------------------------------
 !     2-MODE COUPLING QFF TERMS
 !-----------------------------------------------------------------------
 !            1  2  3  4  5  6  7  8  9 10 11 12
       grdi=(/1,-1, 1,-1, 3, 3, 1,-1,-3,-3,-1, 1/)
-      grdj=(/1, 1,-1,-1, 1,-1,-3,-3,-1, 1, 3, 3/)         
+      grdj=(/1, 1,-1,-1, 1,-1,-3,-3,-1, 1, 3, 3/)
       V2=0.0D0
 !     Calculating energy at stencil 2-d points {grdi(gp),grdj(gp)}
       do nm1=1,nvdf-1
@@ -1281,18 +1283,18 @@ contains
                      dX2(m,k)=Minv(p)*L(p,nm2)*dQ(nm2)
                      Xm(m,k)=X0(m,k) + grdi(gp)*dX1(m,k) + grdj(gp)*dX2(m,k)
                   end do
-               end do 
+               end do
 
                Xm = Xm*a0 ! Convert to Angstroms.
                call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)
                V2(gp,nm1,nm2)=escf
                step_count=step_count+1
                write(*,*) 'ENERGY STEP No  ', step_count
-            end do 
+            end do
          end do
       end do
-     
-!     Calculating QFF 2-mode coupling terms Tiij Tjji Uiiij Ujjji Uiijj 
+
+!     Calculating QFF 2-mode coupling terms Tiij Tjji Uiiij Ujjji Uiijj
       tiij=0.0d0
       tjji=0.0d0
       uiiij=0.0d0
@@ -1319,12 +1321,12 @@ contains
             uiijj(nm1,nm2)= V2(1,nm1,nm2)+V2(2,nm1,nm2)+V2(3,nm1,nm2)+V2(4,nm1,nm2)+4.0D0*V0 &
                       &-2.0D0*( V1(3,nm1)+V1(4,nm1)+V1(3,nm2)+V1(4,nm2) )
             uiijj(nm1,nm2)=uiijj(nm1,nm2)/dQ(nm1)**2/dQ(nm2)**2
-         end do 
+         end do
       end do
 !-----------------------------------------------------------------------
 !     3-MODE COUPLING QFF TERMS
 !-----------------------------------------------------------------------
-!            1  2  3  4  5  6  7  8 
+!            1  2  3  4  5  6  7  8
       grti=(/1, 1,-1,-1, 1, 1,-1,-1/)
       grtj=(/1,-1, 1,-1, 1,-1, 1,-1/)
       grtk=(/1,-1,-1, 1,-1, 1, 1,-1/)
@@ -1333,7 +1335,7 @@ contains
          do nm2=nm1+1,nvdf-1
             do nm3=nm2+1,nvdf
                do gp=1,12
-   
+
                   do k=1,nqmatoms
                      do m=1,3
                         p = 3*(k-1)+m
@@ -1343,18 +1345,18 @@ contains
                         Xm(m,k)=X0(m,k) + grti(gp)*dX1(m,k) + &
                         &grtj(gp)*dX2(m,k) + grtj(gp)*dX3(m,k)
                      end do
-                  end do 
-   
+                  end do
+
                   Xm = Xm*a0 ! Convert to Angstroms.
                   call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)
                   V3(grti(gp),grtj(gp),grtk(gp),nm1,nm2,nm3)=escf
                   step_count=step_count+1
                   write(*,*) 'ENERGY STEP No  ', step_count
                end do
-            end do 
+            end do
          end do
       end do
-!     Calculating QFF 2-mode coupling terms Tiij Tjji Uiiij Ujjji Uiijj 
+!     Calculating QFF 2-mode coupling terms Tiij Tjji Uiiij Ujjji Uiijj
       tijk=0.0d0
       uiijk=0.0d0
       uijjk=0.0d0
@@ -1368,7 +1370,7 @@ contains
                  & -V3( 1, 1,-1,nm1,nm2,nm3)-V3( 1,-1, 1,nm1,nm2,nm3) &
                  & -V3(-1, 1, 1,nm1,nm2,nm3)-V3(-1,-1,-1,nm1,nm2,nm3)
                tijk(nm1,nm2,nm3)=tijk(nm1,nm2,nm3)/(8d0*dQ(nm1)*dQ(nm2)*dQ(nm3))
-   
+
                uiijk(nm1,nm2,nm3) = &
                 &   V3( 1, 1, 1,nm1,nm2,nm3) + V3( 1,-1,-1,nm1,nm2,nm3) &
                 & + V3(-1, 1, 1,nm1,nm2,nm3) + V3(-1,-1,-1,nm1,nm2,nm3) &
@@ -1377,7 +1379,7 @@ contains
                 & + 2d0*V2(2,nm2,nm3) + 2d0*V2(3,nm2,nm3) &
                 & - 2d0*V2(1,nm2,nm3) - 2d0*V2(4,nm2,nm3)
                uiijk(nm1,nm2,nm3)=uiijk(nm1,nm2,nm3)/(4d0*dQ(nm2)*dQ(nm3)*dQ(nm1)**2)
-   
+
                uijjk(nm1,nm2,nm3) = &
                 &   V3( 1, 1, 1,nm1,nm2,nm3) - V3( 1,-1,-1,nm1,nm2,nm3) &
                 & - V3(-1, 1, 1,nm1,nm2,nm3) + V3(-1,-1,-1,nm1,nm2,nm3) &
@@ -1386,7 +1388,7 @@ contains
                 & + 2d0*V2(2,nm1,nm3) + 2d0*V2(3,nm1,nm3) &
                 & - 2d0*V2(1,nm1,nm3) - 2d0*V2(4,nm1,nm3)
                uijjk(nm1,nm2,nm3)=uijjk(nm1,nm2,nm3)/(4d0*dQ(nm1)*dQ(nm3)*dQ(nm2)**2)
-   
+
                uijkk(nm1,nm2,nm3) = &
                 &   V3( 1, 1, 1,nm1,nm2,nm3) - V3( 1,-1,-1,nm1,nm2,nm3) &
                 & - V3(-1, 1, 1,nm1,nm2,nm3) + V3(-1,-1,-1,nm1,nm2,nm3) &
@@ -1396,7 +1398,7 @@ contains
                 & - 2d0*V2(1,nm1,nm2) - 2d0*V2(4,nm1,nm2)
                uijkk(nm1,nm2,nm3)=uijjk(nm1,nm2,nm3)/(4d0*dQ(nm1)*dQ(nm2)*dQ(nm3)**2)
             end do
-         end do 
+         end do
       end do
 
       write(*,*) '----------------------------------------------'
@@ -1439,7 +1441,7 @@ contains
                      &hii,tiii,tiij,tjji,uiiii,uiiij,ujjji,uiijj, &
                      &tijk,uiijk,uijjk,uijkk)
 !     ------------------------------------------------------------------
-!     COMPUTES A SEMINUMERICAL QUARTIC FORCE FIELD USING ANALYTICAL 
+!     COMPUTES A SEMINUMERICAL QUARTIC FORCE FIELD USING ANALYTICAL
 !     GRADIENT CALLS UP TO 3-MODES COUPLINGS.
 !     ------------------------------------------------------------------
       implicit none
@@ -1495,7 +1497,7 @@ contains
       integer             :: step_count
       integer             :: dd(4)
       integer             :: grdi(4),grdj(4)
-    
+
       include "qvmbia_param.f"
 !     Eliminating rotational and translational degrees of freedom.
       do nm=7,ndf
@@ -1505,22 +1507,22 @@ contains
 
 !     We define the step size acording to J.Chem.Phys 121:1383
 !     Using a dimensionless reduced coordinate y=sqrt(omega_i/hbar)Qi
-!     where omega_i is the freq of mode i and Qi is normal coordinate 
+!     where omega_i is the freq of mode i and Qi is normal coordinate
 !     of mode i. Then the step size dQi is given by
 !
 !                    dQi = dy/sqrt(omega_i)
 !
-!     Where omega_i = Sqrt(Ki/mi) in atomic units (hbar=1). 
+!     Where omega_i = Sqrt(Ki/mi) in atomic units (hbar=1).
 !     dy is arbitrary and set to 0.5 by default.
 !     To obtain the displacement vector in cartesian coordinates dXi
-!                  
+!
 !                   dXi = M^(-1) * Li * dQi
 !
 !     Where M^(-1) is the inverse mass weights matrix diag(1/Sqrt(mi))
 !     Li is the normal mode i (a column eigenvector of the hessian).
-      write(77,'(A)')'------------------------------------------------------------------------' 
-      write(77,'(A)')'         STARTING SEMINUMERICAL QFF COMPUTATION USING GRADIENTS         ' 
-      write(77,'(A)')'------------------------------------------------------------------------' 
+      write(77,'(A)')'------------------------------------------------------------------------'
+      write(77,'(A)')'         STARTING SEMINUMERICAL QFF COMPUTATION USING GRADIENTS         '
+      write(77,'(A)')'------------------------------------------------------------------------'
 
       omega = Sqrt(hii)
       dQ = dy/Sqrt(omega)
@@ -1559,9 +1561,9 @@ contains
 !-----------------------------------------------------------------------
 !     Converting units from Angstroms to Bohrs. We work in Bohrs.
 !     Convert back to Angstroms before calling SCF_in
-      X0=qmcoords/a0 
+      X0=qmcoords/a0
 
-!     Calculating displaced coordinates and energy at 6 grid points 
+!     Calculating displaced coordinates and energy at 6 grid points
 !     along each normal mode.
       dd=(/-2,-1,1,2/)
       write(77,'(A)') 'LABELS FOR 1d STENCIL POINTS'
@@ -1591,7 +1593,7 @@ contains
                     gtmp(3*(k-1)+m)=Minv(3*(k-1)+m)*dxyzqm(m,k)
                 end do
             end do
-      
+
       !     Convert to normal coordinates.
             call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
             grad1(:,j,nm)=gnc
@@ -1606,13 +1608,13 @@ contains
          uiiii(nm)=grad1(nm,4,nm)+2D0*(grad1(nm,2,nm)-grad1(nm,3,nm))-grad1(nm,1,nm)
          uiiii(nm)=uiiii(nm)*0.5d0/dQ(nm)**3
       end do
-      
+
 !-----------------------------------------------------------------------
 !     2-MODE COUPLING QFF TERMS
 !-----------------------------------------------------------------------
 !            1  2  3  4
       grdi=(/1,-1, 1,-1/)
-      grdj=(/1, 1,-1,-1/)         
+      grdj=(/1, 1,-1,-1/)
       grad2=0.0D0
 !     Calculating energy at stencil 2-d points {grdi(gp),grdj(gp)}
       do nm1=1,nvdf-1
@@ -1626,13 +1628,13 @@ contains
                      dX2(m,k)=Minv(p)*L(p,nm2)*dQ(nm2)
                      Xm(m,k)=X0(m,k) + grdi(gp)*dX1(m,k) + grdj(gp)*dX2(m,k)
                   end do
-               end do 
+               end do
 
                Xm = Xm*a0 ! Convert to Angstroms.
                call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)
                call dft_get_qm_forces(dxyzqm)
                call dft_get_mm_forces(dxyzcl,dxyzqm)
-   
+
                gtmp=0d0
                gnc=0d0
 
@@ -1642,18 +1644,18 @@ contains
                        gtmp(3*(k-1)+m)=Minv(3*(k-1)+m)*dxyzqm(m,k)
                    end do
                end do
-         
+
          !     Convert to normal coordinates.
                call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
                grad2(:,gp,nm1,nm2)=gnc
-   
+
                step_count=step_count+1
                write(77,'(A,I6,A,I6)') 'GRAD STEP No ', step_count,'/',1+nvdf*4+2*nvdf*(nvdf-1)
-            end do 
+            end do
          end do
       end do
-     
-!     Calculating QFF 2-mode coupling terms Tiij Tjji Uiiij Ujjji Uiijj 
+
+!     Calculating QFF 2-mode coupling terms Tiij Tjji Uiiij Ujjji Uiijj
       tiij=0.0d0
       tjji=0.0d0
       uiiij=0.0d0
@@ -1664,7 +1666,7 @@ contains
 !           KEY
 !           dd=(/-2,-1,1,2/)
 !           grdi=(/1,-1, 1,-1/)
-!           grdj=(/1, 1,-1,-1/)         
+!           grdj=(/1, 1,-1,-1/)
 
             tmp1=0d0
             tmp2=0d0
@@ -1705,7 +1707,7 @@ contains
             tmp2=grad2(nm1,1,nm1,nm2)+grad2(nm1,3,nm1,nm2)-grad2(nm1,2,nm1,nm2)-grad2(nm1,4,nm1,nm2)
             tmp2=(tmp2-2d0*grad1(nm1,3,nm1)+2d0*grad1(nm1,2,nm1))/(2d0*dQ(nm1)*dQ(nm2)**2)
             uiijj(nm1,nm2)= (tmp1+tmp2)*0.5d0
-         end do 
+         end do
       end do
 
 !     BEGINING COMPUTATION OF 3-MODE COUPLING TERMS.
@@ -1719,7 +1721,7 @@ contains
 !              KEY
 !              dd=(/-2,-1,1,2/)
 !              grdi=(/1,-1, 1,-1/)
-!              grdj=(/1, 1,-1,-1/)         
+!              grdj=(/1, 1,-1,-1/)
                tmp1=0d0
                tmp2=0d0
                tmp3=0d0
@@ -1738,7 +1740,7 @@ contains
 
                tijk(nm1,nm2,nm3)=(tmp1+tmp2+tmp3)/3d0
 
-             
+
                tmp1=0d0
                tmp2=0d0
 
@@ -1788,7 +1790,7 @@ contains
 
             end do
          end do
-      end do   
+      end do
       write(*,*) '----------------------------------------------'
       write(*,*) '   FINISHED WITH QUARTIC FORCE FIELD COMP     '
       write(*,*) '----------------------------------------------'
@@ -1825,5 +1827,3 @@ contains
 
 
 end module qvamod_lioexcl
-
- 
