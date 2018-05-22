@@ -67,6 +67,8 @@ program qumvia_main
    integer, allocatable :: at_numbers(:)
    real*8, allocatable :: qvageom(:,:)
    type(lio_nml_type), save  :: lio_nml
+   double precision :: a0  =   0.5291771D00         ! bohr radius
+   integer :: i,j
 #endif
 
 !  PARSING COMMAND LINE ARGUMENTS
@@ -124,9 +126,8 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 
    call lio_defaults()
    call read_options(qva_cli%inp,qmcharge)
-   Iz = at_numbers
-   r  = qvageom
-   rqm= qvageom
+   call read_coords_lio(qva_cli%geo)
+
    call get_lio_nml(qva_cli%inp,lio_nml)
    call print_lio_nml(lio_nml)
    call init_lio_common(nqmatoms,at_numbers,nsol,qmcharge,0)

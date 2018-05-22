@@ -35,7 +35,7 @@ module qvamod_lioexcl
    implicit none
    private
    public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml,&
-           & print_lio_nml
+           & print_lio_nml, read_coords_lio
 
 
    type lio_nml_type
@@ -305,6 +305,45 @@ contains
 
      end subroutine print_lio_nml
 
+
+     !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%!
+     !%% READ_COORDS  Reads atoms' coordinates from an input file for LIO           !
+     !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%!
+     subroutine read_coords_lio(inputCoord)
+
+         use garcha_mod, only : natom, ntatom, nsol, iz, r, rqm, pc
+
+         implicit none
+
+         character(len=20), intent(in) :: inputCoord
+
+         integer :: ios,i
+         logical :: fileExists
+
+         inquire(file=inputCoord,exist=fileExists)
+         if(fileExists) then
+             open(unit=101,file=inputCoord,iostat=ios)
+         else
+             write(*,*) 'Input coordinates file ',adjustl(inputCoord),' not found.'
+             stop
+         endif
+
+         ! Reads coordinates file.
+         ntatom = natom + nsol
+         allocate (iz(natom), r(ntatom,3), rqm(natom,3), pc(ntatom))
+         read(101,*)
+         do i=1,natom
+             read(101,*) iz(i), r(i,1:3)
+             rqm(i,1:3) = r(i,1:3)
+         enddo
+         do i=natom+1,ntatom
+             read(101,*) pc(i), r(i,1:3)
+         enddo
+         r  = r   / 0.529177D0
+         rqm= rqm / 0.529177D0
+
+         return
+     end subroutine read_coords_lio
 
 !######################################################################
 !    HESSIAN AND HARMONIC OSCILLATOR SECTION
@@ -874,6 +913,15 @@ contains
       grad=0.0D0
 
 !     Calculating energy and gradient at the initial geometry.
+ !     PRINT THE GEOMETRY JUST READ
+       write(77,'(A)') 'INPUT GEOMETRY'
+       write(77,'(A)') '-----------------------------------------------------------------'
+       do i=1,nqmatoms
+          write(77,'(I5,3D20.11)') at_numbers(i),qmcoords(:,i)
+       end do
+       write(77,'(A)') '-----------------------------------------------------------------'
+       write(77,*)
+
       call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
       call dft_get_qm_forces(dxyzqm)
       call dft_get_mm_forces(dxyzcl,dxyzqm)

@@ -9,8 +9,8 @@ BINDIR=../bin
 OBJDIR=../obj
 
 FC=ifort
-FFLAGS= -O3 -ip -xHost -FR -I${MKL_HOME}/include 
-FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME) 
+FFLAGS= -O3 -ip -xHost -FR -I${MKL_HOME}/include
+FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME)
 LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(LIO_HOME)/g2g -lg2g -L$(LIO_HOME)/lioamber -llio-g2g
 LIOFLAGS= -I$(LIO_HOME)/lioamber -I$(LIO_HOME)/lioamber/obj
 
@@ -38,29 +38,29 @@ M_kracken.o: M_kracken.f90
 #----------------------------------------------------------------------------------------
 # COMMON COMPILATION RULES
 #----------------------------------------------------------------------------------------
-qvamod_common.o: qvamod_common.f90 
+qvamod_common.o: qvamod_common.f90
 	$(FC) $(FFLAGS) -c qvamod_common.f90 $(FLIBS)
 
 #----------------------------------------------------------------------------------------
 # CPU COMPILATION RULES
 #----------------------------------------------------------------------------------------
-qvamod_cpu.o: qvamod_common.mod qvamod_alt.f90 
+qvamod_cpu.o: qvamod_common.mod qvamod_alt.f90
 	$(FC) -fpp -Dqvacpu $(FFLAGS) -c qvamod_alt.f90 $(FLIBS) -o qvamod_cpu.o
 
-qvamain_cpu.o: qvamod_common.mod qvamod_cpu.mod qvamain.f90 
+qvamain_cpu.o: qvamod_common.mod qvamod_cpu.mod qvamain.f90
 	$(FC) -fpp -Dqvacpu $(FFLAGS) -c qvamain.f90 $(FLIBS) -o qvamain_cpu.o
 
 #----------------------------------------------------------------------------------------
 # LIO COMPILATION RULES
 #----------------------------------------------------------------------------------------
 qvamod_lioexcl.o: qvamod_common.mod qvamod_lioexcl.f90
-	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) $(LIOLIBS) -o qvamod_lioexcl.o
+	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) $(LIOLIBS) -o qvamod_lioexcl.o
 
-qvamod_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_alt.f90 
+qvamod_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_alt.f90
 	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_alt.f90 $(FLIBS) $(LIOLIBS) \
 		-o qvamod_lio.o
 
-qvamain_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_lio.mod qvamain.f90 
+qvamain_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_lio.mod qvamain.f90
 	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c qvamain.f90 $(FLIBS) $(LIOLIBS) \
 		-o qvamain_lio.o
 
@@ -71,4 +71,4 @@ mvdirs:
 	mv qumvia.* $(BINDIR)
 
 clean:
-	rm -rf *.o *.mod qumvia.* 
+	rm -rf *.o *.mod qumvia.*
