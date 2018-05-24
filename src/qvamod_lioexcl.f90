@@ -35,11 +35,7 @@ module qvamod_lioexcl
    implicit none
    private
    public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml,&
-<<<<<<< cb52330281e84ee344e85760f1b200e1508f82b8
-           & print_lio_nml, read_coords_lio
-=======
-           & print_lio_nml,rrintensities
->>>>>>> Added Resonant Raman Intesities code to qvamod_lioexcl
+           & print_lio_nml, read_coords_lio, rrintensities
 
 
    type lio_nml_type
@@ -597,7 +593,6 @@ contains
 !        write(77,'(999D10.2)') hessp(i,:)
 !     end do
 
-<<<<<<< 55d00c246866e6d90d47f58b80ace662f2ae4a00
      return
 
      end subroutine
@@ -775,8 +770,6 @@ contains
 !        write(77,'(999D10.2)') hessp(i,:)
 !     end do
 
-=======
->>>>>>> Added comments in rrintensities main subroutine
      return
 
      end subroutine
@@ -886,34 +879,8 @@ contains
       integer :: LWORK, LIWORK, INFO
 
 !     PARAMETERS
-<<<<<<< 55d00c246866e6d90d47f58b80ace662f2ae4a00
       real*8, PARAMETER :: h2cm=219475.64d0  ! Convert hartee/bohr^2/emu to cm-1
       real*8, PARAMETER :: freq2cm=5141.1182009496200901D0 ! Convert freq to cm-1
-=======
-!     -----------------------------------------------------------------------------------
-!     The following array contains all atomic masses ordered by atomic number,
-!     so that atomic_masses(<atomic_number>) -where <atomic_number> may be 1 to 18-
-!     returns the atomic mass corresponding to <atomic_number>.
-!     All masses correspond to the most abundant isotope and are in Daltons. Atomic
-!     masses for H, He, and O are obtanied from  Mohr, Taylor, Newell, Rev. Mod. Phys.
-!     80 (2008) 633-730. The rest are extracted from NIST:
-!     http://physics.nist.gov/cgi-bin/Compositions/stand_alone.pl.
-!     -----------------------------------------------------------------------------------
-      real*8, PARAMETER :: EMASS_CODATA08 = 0.0005485799111D0 ! Electron mass in Daltons (me * Na). The mass of 1 mol of electrons.
-      real*8, PARAMETER :: AMU_TO_AU = 1.0d0/EMASS_CODATA08   ! Conversion factor Da to AU
-      real*8, PARAMETER :: atomic_masses(18) =&
-          (/  1.00866491574D0, 4.002603254153D0,  7.016004D0,  9.012182D0, 11.009305D0, &
-             12.0D0,          14.0030740048D0,   15.99491461956D0, 18.998403D0,         &
-             19.992440D0,     22.989770D0,       23.985042D0,      26.981538D0,         &
-             27.976927D0,     30.973762D0,       31.972071D0,      34.968853D0,         &
-             39.962383D0 /)
-      real*8, PARAMETER :: atomic_masses_au(18) = atomic_masses * AMU_TO_AU
-      real*8, PARAMETER :: sqrt_atomic_masses_au(18) = SQRT(atomic_masses_au)
-      real*8, PARAMETER :: invsqrt_atomic_masses_au(18) = 1.0d0/SQRT(atomic_masses_au)
-      real*8, PARAMETER :: D1=1.0D00, D2=2.0D00
-      real*8, PARAMETER :: PI  =   D2*ACOS(0.0D00)      ! PI
-      real*8, PARAMETER :: h2cm=219475.64d0  ! Convert Hartree to cm-1
->>>>>>> Added comments in rrintensities main subroutine
 
       include "qvmbia_param.f"
 !     -------------------------------------------------------------------------
@@ -929,7 +896,6 @@ contains
       sign_eig=1.0D00
       at_masses=0.0D0
 
-<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
 !     Create a vector of inverse square-root masses corresponding to each
 !     cartesian coordinate.
       do i=1,nqmatoms
@@ -946,8 +912,6 @@ contains
       end if
       grad=0.0D0
 
-=======
->>>>>>> Added feature: Resonant Raman intensities
 !     Calculating energy and gradient at the initial geometry.
  !     PRINT THE GEOMETRY JUST READ
        write(77,'(A)') 'INPUT GEOMETRY'
@@ -1040,27 +1004,9 @@ contains
                 end do
                end do
 
-<<<<<<< 55d00c246866e6d90d47f58b80ace662f2ae4a00
             end if
 
          end do
-=======
-!     Create a vector of inverse square-root masses corresponding to each
-!     cartesian coordinate.
-      do i=1,nqmatoms
-          do j=1,3
-              k=at_numbers(i)
-              at_masses(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
-          end do
-      end do
-
-!     Calculating non diagonal elements of the Hessian
-      do i=1,ncoords
-          do j=i,ncoords
-              hess(i,j)=grad(i+1,j)-grad(1,j)+grad(j+1,i)-grad(1,i)
-              hess(i,j)=at_masses(i)*at_masses(j)*hessf*hess(i,j)
-          end do
->>>>>>> Added comments in rrintensities main subroutine
       end do
       write(77,'(A)') 'FINISHED ALL GRADIENTS COMPUTATIONS, NOW COMPUTING HESSIAN'
 
@@ -1139,13 +1085,8 @@ contains
 
 !     Convert frequecies to wavenumbers
       do i = 1,ncoords
-<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
          freq(i) = sign(sign_eig(i),eig(i))*freq2cm*sqrt(abs(eig(i)))
       ENDDO
-=======
-         freq(i) = sign(sign_eig(i),eig(i))*h2cm*sqrt(abs(eig(i)))
-      end do
->>>>>>> Added feature: Resonant Raman intensities
 
 !     Fix the phase of the eigenvectors
       call fixphase(hess,qmcoords,ncoords,nqmatoms)
@@ -2001,15 +1942,9 @@ contains
       & "Li","Be","B ","C ","N ","O ","F ","Ne","Na","Mg","Al","Si",&
       & "P ","S ","Cl","Ar","K ","Ca","Sc","Ti","V ","Cr","Mn","Fe",&
       & "Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr"/)
-<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
-      real*8,parameter    :: a0=0.5291771D00
-    
-      include "qva_atmass_params.f90"
-=======
       real*8,parameter    :: bohr2ang = 0.5291771D00         ! bohr radius
 
       include "mass_params.f90"
->>>>>>> Added feature: Resonant Raman intensities
 
 !     Read geometry file.
       write(77,'(A)') 'READING GEOMETRY'
@@ -2019,17 +1954,6 @@ contains
       ndf=3*nqmatoms
       nvdf=ndf-6
 
-<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
-!     Create a vector of inverse square-root masses corresponding to each 
-!     cartesian coordinate.
-      do i=1,nqmatoms
-          do j=1,3
-              k=at_numbers(i)
-              atmass(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
-          end do
-      end do
-
-=======
       if (qva_nml%uvvis == 1) then
 !        COMPUTING UV-VIS SPECTRA
 !        ------------------------------------------------------------------
@@ -2039,7 +1963,6 @@ contains
 
 !     COMPUTING HARMONIC ANALYSIS
 !     ------------------------------------------------------------------
->>>>>>> Added feature: Resonant Raman intensities
       write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
       call hessian(qvageom,nqmatoms,at_numbers,nmodes,eig)
       L=nmodes(:,7:ndf)
@@ -2195,21 +2118,6 @@ contains
          end do
       end do
 
-<<<<<<< 068bf7308f511d710bb7c30ac3304f0b890f6528
-<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
-!     ------------------------------------------------------------------
-!     DEBUG
-!     ------------------------------------------------------------------
-      write(77,'(A)')'MASS WEIGHT MATRIX'
-      write(77,'(99F15.10)') Minv
-!     ------------------------------------------------------------------
-
-=======
-      write(77,*) 'BEFORE QVAGEOM'
->>>>>>> Added feature: Resonant Raman intensities
-=======
-      ! write(77,*) 'BEFORE QVAGEOM'
->>>>>>> Made changes to fix compatibility issues between qumvia and lio 2018. Addedsome module calls to td_data and fields_data in order to correct them.
 !-----------------------------------------------------------------------
 !     GENERATING STENCIL GEOMETRIES
 !-----------------------------------------------------------------------
@@ -2277,36 +2185,6 @@ contains
             end do
 
 !           ------------------------------------------------------------
-<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
-!           HERE BEGINS TIMEDEPENDENT PART
-
-!            timedep = 1
-!            fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)
-!            fxyz(2,:)=(/0d0,qva_nml%rri_fxyz,0d0/)
-!            fxyz(3,:)=(/0d0,0d0,qva_nml%rri_fxyz/)
-!
-!            do i=1,3
-!
-!               Fx=fxyz(i,1)
-!               Fy=fxyz(i,2)
-!               Fz=fxyz(i,3)
-!
-!               E_mod=qva_nml%rri_fxyz*514.220652d0             ! Convert to V/nm
-!               call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)   
-!
-!!              alpha(nmode,stencil_point,field_coord,dip_coord)
-!               call rrtdanalyze('x.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
-!               alphat(nm,j,i,1) = ABS(CMPLX(ftr,fti,8))/E_mod
-!
-!               call rrtdanalyze('y.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
-!               alphat(nm,j,i,2) = ABS(CMPLX(ftr,fti,8))/E_mod
-!
-!               call rrtdanalyze('z.dip',ntdstep,tdstep,qva_nml%laserfreq,qva_nml%rrint_damp,ftr,fti)
-!               alphat(nm,j,i,3) = ABS(CMPLX(ftr,fti,8))/E_mod
-!
-!            end do
-!           END OF TD PART
-=======
 !           TIME DEPENDENT CALCULATION
             timedep = 1
             fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)  ! Defining electric field
@@ -2321,7 +2199,6 @@ contains
 
                call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)
             end do
->>>>>>> Added feature: Resonant Raman intensities
 !           ------------------------------------------------------------
             step = step + 1
 
@@ -2334,19 +2211,6 @@ contains
          STOP
       end if
 
-<<<<<<< 3d02e19adaf35b093b863312b609077861e2d1cd
-!     COMPUTE DERIVATIVES OF POLARIZABILITY VS NORMAL MODES
-!     ------------------------------------------------------------------
-!      call derivate_alpha(alphat,dQ,dalpha,nvdf)
-      
-!     COMPUTE RESONANT RAMAN ACTIVITY
-!     ------------------------------------------------------------------
-!      call rractivity(dalpha,nvdf,rract)
-
-!     PRINT RESONANT RAMAN ACTIVITY
-!     ------------------------------------------------------------------
-!      call printrract(rract,nvdf,hii)
-=======
       close(unit=16,iostat=closestatus)
       if (closestatus/=0) then
          write(77,'(A)') 'ERROR: COULD NOT CLOSE FILE'
@@ -2463,7 +2327,6 @@ contains
          close(unit=99)
 
 100      format (1x,F14.6,2x,F14.6)
->>>>>>> Added feature: Resonant Raman intensities
 
       end subroutine
 
