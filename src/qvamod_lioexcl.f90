@@ -1964,7 +1964,8 @@ contains
 !     COMPUTING HARMONIC ANALYSIS
 !     ------------------------------------------------------------------
       write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
-      call hessian(qvageom,nqmatoms,at_numbers,nmodes,eig)
+      call hessian(qvageom,nqmatoms,qva_nml%hess_h,qva_nml%hess_norder, &
+                       & at_numbers,nmodes,eig)
       L=nmodes(:,7:ndf)
       hii=eig(7:ndf)
 
