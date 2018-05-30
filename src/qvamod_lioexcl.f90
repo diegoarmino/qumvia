@@ -2013,7 +2013,7 @@ contains
 !     ------------------------------------------------------------------
       use garcha_mod
       use field_data, only: fx, fy, fz
-      use td_data, only: timedep
+      use td_data, only: timedep, ntdstep
       implicit none
 
       type(lio_nml_type), intent(in) :: lio_nml
@@ -2078,6 +2078,7 @@ contains
       ngaus=16
       ndf=3*nqmatoms
       nvdf=ndf-6
+      ntdstep=ntdstep+199
 
 !     We define the step size acording to J.Chem.Phys 121:1383
 !     Using a dimensionless reduced coordinate y=sqrt(omega_i/hbar)Qi
@@ -2197,7 +2198,6 @@ contains
                Fx=fxyz(i,1)
                Fy=fxyz(i,2)
                Fz=fxyz(i,3)
-
                call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)
             end do
 !           ------------------------------------------------------------
@@ -2418,6 +2418,7 @@ contains
       end subroutine
 
       subroutine calc_poltens(ns,ts,laserlambda,damp,nvdf,Emod,poltens)
+         use, intrinsic :: iso_c_binding
          implicit none
 
 !        --------------------------------------------------------------
@@ -2443,12 +2444,17 @@ contains
          integer      :: nm,dd,fi
          integer      :: step
          integer      :: ierr
+         integer      :: tmp
+         double precision :: in(ns)
+         complex*16 :: out(ns/2+1)
+         integer*8 :: plan
 
          real*8,parameter :: c=299792458d0*1d9   !Speed o' light nm/s
 
          real*8, allocatable :: mux(:),muy(:),muz(:)
 !        --------------------------------------------------------------
 
+         include 'fftw3.f03'
          allocate (mux(ns),muy(ns),muz(ns))
 
          pi = 3.1415926535897932384626433832795d0
@@ -2461,19 +2467,9 @@ contains
 
 !        OPEN TRAJECTORY FILES
 !        ---------------------------------------------------------------
-         open(UNIT=89, FILE='x.dip', ACTION='READ', IOSTAT=ierr)
+         open(UNIT=89, FILE='dipole_moment_td', ACTION='READ', IOSTAT=ierr)
          if (ierr /= 0) then
-            write(77,'(A)') 'COULD NOT OPEN FILE x.dip'
-            STOP
-         end if
-         open(UNIT=90, FILE='y.dip', ACTION='READ', IOSTAT=ierr)
-         if (ierr /= 0) then
-            write(77,'(A)') 'COULD NOT OPEN FILE y.dip'
-            STOP
-         end if
-         open(UNIT=91, FILE='z.dip', ACTION='READ', IOSTAT=ierr)
-         if (ierr /= 0) then
-            write(77,'(A)') 'COULD NOT OPEN FILE z.dip'
+            write(77,'(A)') 'COULD NOT OPEN FILE dipole_moment_td'
             STOP
          end if
 
@@ -2483,15 +2479,9 @@ contains
                do fi=1,3
 !                 ---------------------------------------------------------------
 !                 READ DIPOLES
+                  read(89,*)  ! read header
                   do step=1,ns
-                     read(89,*) tx, mux(step)
-                     read(90,*) ty, muy(step)
-                     read(91,*) tz, muz(step)
-                     if (tx/=ty .OR. tx/=tz .OR. ty/=tz) then
-                        write(77,'(A)') 'ERROR: TIME MISMATCH WHILE READING DIPOLES'
-                        write(77,'(I4,2I2,I5)') nm,dd,fi,step
-                        STOP
-                     end if
+                     read(89,*) mux(step), muy(step), muz(step),tmp
                   end do
 !                 ---------------------------------------------------------------
 !                 DIFFERENTIATE
@@ -2502,37 +2492,42 @@ contains
                   end do
 !                 ---------------------------------------------------------------
 !                 FOURIER TRANSFORM
-                  t=0.0
-                  ftix = 0.0d0
-                  ftrx = 0.0d0
-                  ftiy = 0.0d0
-                  ftry = 0.0d0
-                  ftiz = 0.0d0
-                  ftrz = 0.0d0
-                  do j = 1,ns-1
-                    t = t + tss
-                    ftrx = ftrx + cos(2*pi*t*nu) * mux(j) * exp(-t*damps) ! real part w/ damp
-                    ftix = ftix + sin(2*pi*t*nu) * mux(j) * exp(-t*damps) ! imaginary part w/ damp
-
-                    ftry = ftry + cos(2*pi*t*nu) * muy(j) * exp(-t*damps) ! real part w/ damp
-                    ftiy = ftiy + sin(2*pi*t*nu) * muy(j) * exp(-t*damps) ! imaginary part w/ damp
-
-                    ftrz = ftrz + cos(2*pi*t*nu) * muz(j) * exp(-t*damps) ! real part w/ damp
-                    ftiz = ftiz + sin(2*pi*t*nu) * muz(j) * exp(-t*damps) ! imaginary part w/ damp
-                  enddo
+                  call dfftw_plan_dft_r2c_1d(plan,ns,in,out,"FFTW_ESTIMATE")
+                  call dfftw_execute_dft_r2c(plan, in, out)
+                  call dfftw_destroy_plan(plan)
+!                  t=0.0
+!                  ftix = 0.0d0
+!                  ftrx = 0.0d0
+!                  ftiy = 0.0d0
+!                  ftry = 0.0d0
+!                  ftiz = 0.0d0
+!                  ftrz = 0.0d0
+!                  do j = 1,ns-1
+!                    t = t + tss
+!                    ftrx = ftrx + cos(2*pi*t*nu) * mux(j) * exp(-t*damps) ! real part w/ damp
+!                    ftix = ftix + sin(2*pi*t*nu) * mux(j) * exp(-t*damps) ! imaginary part w/ damp
+!
+!                    ftry = ftry + cos(2*pi*t*nu) * muy(j) * exp(-t*damps) ! real part w/ damp
+!                    ftiy = ftiy + sin(2*pi*t*nu) * muy(j) * exp(-t*damps) ! imaginary part w/ damp
+!
+!                    ftrz = ftrz + cos(2*pi*t*nu) * muz(j) * exp(-t*damps) ! real part w/ damp
+!                    ftiz = ftiz + sin(2*pi*t*nu) * muz(j) * exp(-t*damps) ! imaginary part w/ damp
+!                  enddo
 !                 ---------------------------------------------------------------
 !                 COMPUTE POLARIZABILITY TENSOR ELEMENTS
-                  write(77,'(A,2D13.6)') 'ftr = ',ftrx, ftix
-                  poltens(nm,dd,fi,1)=ABS(CMPLX(ftrx,ftix,8))/Emod
-                  poltens(nm,dd,fi,2)=ABS(CMPLX(ftry,ftiy,8))/Emod
-                  poltens(nm,dd,fi,3)=ABS(CMPLX(ftrz,ftiz,8))/Emod
+!                  write(77,'(A,2D13.6)') 'ftr = ',ftrx, ftix
+!                  poltens(nm,dd,fi,1)=ABS(CMPLX(ftrx,ftix,8))/Emod
+!                  poltens(nm,dd,fi,2)=ABS(CMPLX(ftry,ftiy,8))/Emod
+!                  poltens(nm,dd,fi,3)=ABS(CMPLX(ftrz,ftiz,8))/Emod
+                  poltens(nm,dd,fi,1)=1
+                  poltens(nm,dd,fi,2)=2
+                  poltens(nm,dd,fi,3)=3
+                  write(*,*) out
                end do
             end do
          end do
 
          close(unit=89)
-         close(unit=90)
-         close(unit=91)
 
       end subroutine
 

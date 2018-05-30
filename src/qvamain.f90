@@ -70,6 +70,7 @@ program qumvia_main
    type(lio_nml_type), save  :: lio_nml
    double precision :: a0  =   0.5291771D00         ! bohr radius
    integer :: i,j
+   logical :: is_dip_open
 #endif
 
 !  PARSING COMMAND LINE ARGUMENTS
@@ -159,6 +160,12 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 
 !     COMPUTE HARMONIC SPECTRA WITH RESONANT RAMAN INTENSITIES.
       call rrintensities(lio_nml,qva_cli,qva_nml,nqmatoms)
+
+      inquire(unit = 134, opened = is_dip_open)
+      if (is_dip_open) then
+         close(134)
+      end if
+
       call lio_finalize()
       STOP
 #endif
