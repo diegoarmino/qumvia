@@ -1905,8 +1905,7 @@ contains
       integer             :: qumvia_nmc
       integer             :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
       real*8              :: poltens(3*nqmatoms-6,2,3,3) ! Array of polarizabilities.
-      real*8              :: dalpha(3*nqmatoms-6,3,3)     ! Derivatives of apha vs. nmodes
-      real*8              :: Emod                ! Derivatives of apha vs. nmodes
+      real*8              :: Emod                 ! Derivatives of apha vs. nmodes
       real*8              :: dy                   ! Step size factor dy. Default=0.5d0
       real*8              :: qvageom(3,nqmatoms)  ! QM atom coordinates
 
@@ -1938,6 +1937,9 @@ contains
       integer             :: step
       integer             :: dd(2)
       integer             :: openstatus,closestatus
+
+      complex*16,allocatable      :: dalpha(:,:,:,:) ! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
+
       character(len=2),dimension(36),parameter :: atsym=(/"H ","He",&
       & "Li","Be","B ","C ","N ","O ","F ","Ne","Na","Mg","Al","Si",&
       & "P ","S ","Cl","Ar","K ","Ca","Sc","Ti","V ","Cr","Mn","Fe",&
@@ -1953,6 +1955,7 @@ contains
       ngaus=16
       ndf=3*nqmatoms
       nvdf=ndf-6
+
 
       if (qva_nml%uvvis == 1) then
 !        COMPUTING UV-VIS SPECTRA
@@ -1984,25 +1987,25 @@ contains
 
 !     COMPUTING POLARIZABILITY TENSORS
 !     ------------------------------------------------------------------
-      write(77,'(A)') 'COMPUTING POLARIZABILITY TENSORS'
-      call calc_poltens(lio_nml%ntdstep,lio_nml%tdstep,qva_nml%laserfreq,&
-            & qva_nml%rrint_damp,nvdf,Emod,poltens)
-      if (rrdebug == 1) call print_poltens(poltens,nvdf)
+      write(77,'(A)') 'COMPUTING POLARIZABILITY TENSORS AND DERIVATIVES'
 
-!     COMPUTE DERIVATIVES OF POLARIZABILITY VS NORMAL MODES
-!     ------------------------------------------------------------------
-      write(77,'(A)') 'COMPUTING DERIVATIVES WITH RESPECT TO NORMAL MODES'
-      call derivate_alpha(poltens,dQ,dalpha,nvdf)
-      if (rrdebug == 1) call print_derpoltens(dalpha,nvdf)
+      allocate( dalpha(lio_nml%ntdstep/2+1, 3, 3, nvdf ) )! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
+
+      call calc_derivatives_alphaij(lio_nml%ntdstep  , lio_nml%tdstep,     &
+                                 &  qva_nml%laserfreq, qva_nml%rrint_damp, &
+                                 &  nvdf             , Emod,               &
+                                 &  dQ               , dalpha)
+
+!      if (rrdebug == 1) call print_derpoltens(dalpha,lio_nml%ntdstep,nvdf)
 
 !     COMPUTE RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
       write(77,'(A)') 'COMPUTING RESONANT RAMAN ACTIVITIES'
-      call rractivity(dalpha,nvdf,rract)
+      call rractivity(dalpha,nvdf,lio_nml%ntdstep,rract)
 
 !     PRINT RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
-      call printrract(rract,nvdf,hii)
+      call printrract(rract,nvdf,hii,lio_nml%ntdstep)
 
       end subroutine
 
@@ -2031,7 +2034,6 @@ contains
       integer             :: qva_extprog          ! External program gam=1,gaus=2
       integer             :: qumvia_nmc
       real*8              :: poltens(3*nqmatoms-6,2,3,3) ! Array of polarizabilities.
-      real*8              :: dalpha(3*nqmatoms-6,3,3)     ! Derivatives of apha vs. nmodes
       real*8              :: Emod                ! Derivatives of apha vs. nmodes
       real*8              :: dy                   ! Step size factor dy. Default=0.5d0
 
@@ -2053,6 +2055,9 @@ contains
       real*8              :: dipxyz(3)            ! Dipole moment computed by SCF_in()
       real*8              :: clcoords(4,nclatoms)
       real*8              :: fxyz(3,3)
+
+!      complex*16          :: dalpha( ns/2+1, 3, 3, nvdf ) ! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
+
       integer             :: nat
       integer             :: an
       integer             :: i, j, k
@@ -2222,34 +2227,12 @@ contains
 
 
 
-      subroutine print_poltens(poltens,nvdf)
+      subroutine print_derpoltens(dalpha,ns,nvdf)
          implicit none
 !        --------------------------------------------------------------
-         integer,intent(in)    :: nvdf
-         real*8,intent(in)     :: poltens(nvdf,2,3,3)
-
-         integer               :: nm,dd,i,j
-!        --------------------------------------------------------------
-
-         write(77,'(A)') '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
-         write(77,'(A)') ' POLARIZABILITY TENSORS POLARIZABILITY TENSORS POLARIZABILITY TENSORS '
-         write(77,'(A)') '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
-         do nm=1,nvdf
-            do dd=1,2
-            write(77,'(A,I4,A,I2)') 'MODE = ',nm,'STENCIL = ',dd
-               do i=1,3
-                  write(77,'(3D13.6)') poltens(nm,dd,i,:)
-               end do
-            end do
-         end do
-
-      end subroutine
-
-      subroutine print_derpoltens(dalpha,nvdf)
-         implicit none
-!        --------------------------------------------------------------
-         integer,intent(in)    :: nvdf
-         real*8,intent(in)     :: dalpha(nvdf,3,3)
+         integer,         intent(in)    :: nvdf
+         integer,         intent(in)    :: ns
+         complex*16,      intent(in)    :: dalpha( ns/2+1, 3, 3, nvdf ) ! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
 
          integer               :: nm,i,j
 !        --------------------------------------------------------------
@@ -2259,8 +2242,11 @@ contains
          write(77,'(A)') '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
          do nm=1,nvdf
             write(77,'(A,I4,A,I2)') 'MODE = ',nm
+            do j=1,3
             do i=1,3
-               write(77,'(3D13.6)') dalpha(nm,i,:)
+               write(77,'(A,I4,I4,A)') 'TENSOR ELEMENT (',I,J,')'
+               write(77,*) dalpha(:,i,j,nm)
+            end do
             end do
          end do
 
@@ -2331,12 +2317,13 @@ contains
 
       end subroutine
 
-      subroutine printrract(rract,nvdf,hii)
+      subroutine printrract(rract,nvdf,hii,ns)
          implicit none
 !        --------------------------------------------------------------
          integer,intent(in)       :: nvdf
-         real*8,intent(in)        :: rract(nvdf)
+         integer,intent(in)       :: ns
          real*8,intent(in)        :: hii(nvdf)
+         real*8,intent(in)        :: rract(ns,nvdf)
          integer                  :: nm,i
          real*8                   :: sign_hii(nvdf)
          real*8                   :: freq(nvdf)
@@ -2348,7 +2335,6 @@ contains
          write(77,'(A)') '         HARMONIC FREQUENCIES AND              '
          write(77,'(A)') ' RESONANT RAMAN ACTIVITIES S=45|a|^2 + 7|g|^2  '
          write(77,'(A)') ' --------------------------------------------  '
-         write(77,'(A)') ' MODE     FREQUENCIES    RR ACTIVITIES         '
 
 !        Convert frequecies to wavenumbers
 
@@ -2357,63 +2343,221 @@ contains
             freq(nm) = sign(sign_hii(nm),hii(nm))*h2cm*sqrt(abs(hii(nm)))
          end do
 
-         do nm=1,nvdf
-            write(77,'(I3,F10.2,D18.6)') nm, freq(nm), rract(nm)
+         write(77,'(A,999I18)') 'NORMAL MODE', (nm,nm=1,nvdf)
+         write(77,'(A,999F18.2)') 'FREQUENCIES', (freq(nm),nm=1,nvdf)
+         do i=1,ns
+            write(77,'(I11,999D18.6)') i,(rract(i,nm),nm=1,nvdf)
          end do
 
       end subroutine
 
-      subroutine rractivity(dalpha,nvdf,rract)
+!      subroutine printrract(rract,nvdf,hii)
+!         implicit none
+!!        --------------------------------------------------------------
+!         integer,intent(in)       :: nvdf
+!         real*8,intent(in)        :: rract(nvdf)
+!         real*8,intent(in)        :: hii(nvdf)
+!         integer                  :: nm,i
+!         real*8                   :: sign_hii(nvdf)
+!         real*8                   :: freq(nvdf)
+!         real*8, PARAMETER        :: h2cm=219475.64d0 !Convert Hartree to cm-1
+!!        --------------------------------------------------------------
+!
+!         write(77,'(A)')
+!         write(77,'(A)') ' --------------------------------------------  '
+!         write(77,'(A)') '         HARMONIC FREQUENCIES AND              '
+!         write(77,'(A)') ' RESONANT RAMAN ACTIVITIES S=45|a|^2 + 7|g|^2  '
+!         write(77,'(A)') ' --------------------------------------------  '
+!         write(77,'(A)') ' MODE     FREQUENCIES    RR ACTIVITIES         '
+!
+!!        Convert frequecies to wavenumbers
+!
+!         sign_hii=1.0D00
+!         do nm = 1,nvdf
+!            freq(nm) = sign(sign_hii(nm),hii(nm))*h2cm*sqrt(abs(hii(nm)))
+!         end do
+!
+!         do nm=1,nvdf
+!            write(77,'(I3,F10.2,D18.6)') nm, freq(nm), rract(nm)
+!         end do
+!
+!      end subroutine
+
+      subroutine rractivity(dalpha,nvdf,ns,rract)
          implicit none
 !        --------------------------------------------------------------
-         integer,intent(in)       :: nvdf
-         real*8,intent(in)        :: dalpha(nvdf,3,3)
-         real*8,intent(out)       :: rract(nvdf)
+         integer,                   intent(in)       :: nvdf
+         integer,                   intent(in)       :: ns
+         complex*16,                intent(in)       :: dalpha( ns/2+1, 3, 3, nvdf ) ! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
+         double precision,          intent(out)      :: rract(ns/2+1,nvdf)
 
-         real*8                   :: isot(nvdf)
-         real*8                   :: anis(nvdf)
-         real*8                   :: y1,y2,y3,y4
-         integer                  :: nm
+         double precision                            :: isot(ns/2+1,nvdf)
+         double precision                            :: anis(ns/2+1,nvdf)
+         double precision                            :: y1(ns/2+1)
+         double precision                            :: y2(ns/2+1)
+         double precision                            :: y3(ns/2+1)
+         double precision                            :: y4(ns/2+1)
+         integer                                     :: nm
 !        --------------------------------------------------------------
          do nm=1,nvdf
 !           ISOTROPIC DYNAMIC POLARIZABILITY
-            isot(nm)=(dalpha(nm,1,1)+dalpha(nm,2,2)+dalpha(nm,3,3))/3d0
+            isot(:,nm)=ABS(dalpha(:,1,1,nm)+dalpha(:,2,2,nm)+dalpha(:,3,3,nm))**2/9d0
 
 !           ANISOTROPIC DYNAMIC POLARIZABILITY
-            y1=ABS(dalpha(nm,1,1)-dalpha(nm,2,2))**2
-            y2=ABS(dalpha(nm,2,2)-dalpha(nm,3,3))**2
-            y3=ABS(dalpha(nm,3,3)-dalpha(nm,1,1))**2
-            y4=6d0*(ABS(dalpha(nm,1,2))**2+ABS(dalpha(nm,2,3))**2+ABS(dalpha(nm,3,1))**2)
-            anis(nm)=0.5d0*(y1+y2+y3+y4)
+            y1(:)=ABS(dalpha(:,1,1,nm)-dalpha(:,2,2,nm))**2
+            y2(:)=ABS(dalpha(:,2,2,nm)-dalpha(:,3,3,nm))**2
+            y3(:)=ABS(dalpha(:,3,3,nm)-dalpha(:,1,1,nm))**2
+            y4(:)=6d0*(ABS(dalpha(:,1,2,nm))**2+ABS(dalpha(:,2,3,nm))**2+ABS(dalpha(:,3,1,nm))**2)
+            anis(:,nm)=0.5d0*(y1(:)+y2(:)+y3(:)+y4(:))
 
 !           RESONANT RAMAN ACTIVITY "S"
-            rract(nm)=45d0*isot(nm)**2 + 7d0*anis(nm)
+            rract(:,nm)=45d0*isot(:,nm) + 7d0*anis(:,nm)
 
 !           RESONANT RAMAN CROSS SECTION...
          end do
 
       end subroutine
 
-      subroutine derivate_alpha(alpha,dQ,dalpha,nvdf)
+!      subroutine derivate_alpha(alpha,dQ,dalpha,nvdf)
+!
+!         implicit none
+!!        --------------------------------------------------------------
+!         integer,intent(in) :: nvdf
+!         double precision,intent(in)  :: dQ(nvdf)
+!         double precision,intent(in)  :: alpha(nvdf,2,3,3)
+!         complex*16,      intent(in)      :: dalpha( ns/2+1, 3, 3, nvdf ) ! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
+!         integer            :: nm,i,j
+!!        --------------------------------------------------------------
+!
+!         dalpha=0d0
+!         do nm=1,nvdf
+!            do i=1,3
+!               do j=1,3
+!                  dalpha(nm,i,j)=10d0*(alpha(nm,2,i,j)-alpha(nm,1,i,j))*0.5d0/dQ(nm)
+!                  ! DANGER: FACTOR OF 10 TO CONVERT A TO NM IN NMODE.
+!               end do
+!            end do
+!         end do
+!
+!      end subroutine
 
+      subroutine calc_derivatives_alphaij(ns,ts,laserlambda,damp,nvdf,Emod,dQ,dalpha)
+      !######################################################################
+      ! COMPUTES DERIVATIVES OF THE POLARIZABILITY TENSOR VS NORMAL MODES
+      ! First computes polarizability tensors in frequency domain as the
+      ! Fourier transform of the dipole moment divided by the Fourier transform
+      ! of the electric field, for distorted geometries along
+      ! normal modes and then computes in turn the numerical derivatives for
+      ! each.
+      ! The polarizability spectrum obtained for each component of the tensor
+      ! is stored and the derivative is obtained by finite differences.
+      ! Differences are computed for the entire spectrum and not simply for
+      ! one individual frequency (or wavelenght).
+      !######################################################################
+         use, intrinsic :: iso_c_binding
          implicit none
+
 !        --------------------------------------------------------------
-         integer,intent(in) :: nvdf
-         real*8,intent(in)  :: dQ(nvdf)
-         real*8,intent(in)  :: alpha(nvdf,2,3,3)
-         real*8,intent(out) :: dalpha(nvdf,3,3)
-         integer            :: nm,i,j
+         integer,         intent(in)       :: ns    ! Number of steps.
+         integer,         intent(in)       :: nvdf  ! Number of steps.
+         double precision,intent(in)       :: ts    ! Time step (fs).
+         double precision,intent(in)       :: damp  ! Damping factor (1/fs).
+         double precision,intent(in)       :: laserlambda  ! Laser frequency (nm).
+         double precision,intent(in)       :: Emod  ! External field module (V/nm).
+         double precision,          intent(in)       :: dQ(nvdf)
+         complex*16,      intent(out)      :: dalpha( ns/2+1, 3, 3, nvdf ) ! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
+
+         double precision                  :: nu
+         double precision                  :: t
+         double precision                  :: tss
+         double precision                  :: ene
+         double precision                  :: damps
+         double precision                  :: pi
+         double precision                  :: lambda
+         double precision                  :: ftix,ftiy,ftiz
+         double precision                  :: ftrx,ftry,ftrz
+         double precision                  :: tx,ty,tz
+         double precision                  :: in(ns)
+         double precision,parameter        :: c=299792458d0*1d9   !Speed o' light nm/s
+
+         integer                           :: i, j, k, di
+         integer                           :: nm,dd,fi
+         integer                           :: step
+         integer                           :: ierr
+         integer                           :: tmp
+
+         complex*16                        :: out(ns/2+1)
+         integer*8                         :: plan
+
+         double precision, allocatable     :: mu(:,:)
+         complex*16,       allocatable     :: alpha(:,:,:)
+
+!        --------------------------------------------------------------
+         include 'fftw3.f03'
 !        --------------------------------------------------------------
 
-         dalpha=0d0
-         do nm=1,nvdf
-            do i=1,3
-               do j=1,3
-                  dalpha(nm,i,j)=10d0*(alpha(nm,2,i,j)-alpha(nm,1,i,j))*0.5d0/dQ(nm)
-                  ! DANGER: FACTOR OF 10 TO CONVERT A TO NM IN NMODE.
+         allocate (  mu(ns,3) )
+         allocate (  alpha( ns/2+1, 3, 2 )  )
+!                              ^    ^  ^
+!                      spectra_|    |  |
+!                       dipole xyz _|  |
+!                          stencil ____|
+
+         pi = 3.1415926535897932384626433832795d0
+         tss = ts * 2.418884326505d0 * 1.E-17 !conversion of time step to seconds
+         damps = damp * 1.E15
+
+!        DEBUG
+         write(77,'(A,D13.6)') 'Emod = ',Emod
+         write(77,'(A,D13.6)') 'timestep = ',tss
+
+!        OPEN TRAJECTORY FILES
+!        ---------------------------------------------------------------
+         open(UNIT=89, FILE='dipole_moment_td', ACTION='READ', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A)') 'COULD NOT OPEN FILE dipole_moment_td'
+            STOP
+         end if
+
+         nu =  c/laserlambda            ! nu in Hz, lambda in nm, c in nm/s
+         do nm=1,nvdf                   ! normal modes
+            do fi=1,3                   ! Spatial orientation (x,y,z) of the incident field.
+               alpha=0d0
+               do dd=1,2                ! stencil point: 1=Q-h 2=Q+h
+
+!                 READ DIPOLES FROM FILE
+!                 ---------------------------------------------------------------
+                  read(89,*)  ! read header
+                  do step=1,ns
+                     read(89,*) mu(step,1), mu(step,2), mu(step,3),tmp
+                  end do
+
+!                 DIFFERENTIATE AND FOURIER TRANSFORM
+!                 ---------------------------------------------------------------
+                  do di=1,3     ! dipole spacial direction x, y, z
+!                    Take time derivative
+                     do step=1,ns-1  ! Step of dipole trajectory
+                        mu(step,di)=(mu(step+1,di)-mu(step,di))/tss
+                     end do
+!                    Fourier transform
+                     in=0d0
+                     in=mu(:,di)
+                     call dfftw_plan_dft_r2c_1d(plan,ns,in,out,"FFTW_ESTIMATE")
+                     call dfftw_execute_dft_r2c(plan, in, out)
+                     call dfftw_destroy_plan(plan)
+                     alpha(:,di,dd) = out  ! NOT DECLARED
+                  end do
+               end do
+               do di=1,3          ! dipole spacial direction x, y, z
+                  dalpha(:,di,fi,nm)=(alpha(:,2,di)-alpha(:,1,di))*0.5d0/dQ(nm)
                end do
             end do
          end do
+
+!        Clean up
+         deallocate(alpha)
+         deallocate(mu)
+         close(unit=89)
 
       end subroutine
 
@@ -2445,16 +2589,22 @@ contains
          integer      :: step
          integer      :: ierr
          integer      :: tmp
+         real*8,parameter :: c=299792458d0*1d9   !Speed o' light nm/s
+
+         real*8, allocatable :: mux(:),muy(:),muz(:)
+!        @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+!        DFFTW!!! VERY EXPERIMENTAL
+!        @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
          double precision :: in(ns)
          complex*16 :: out(ns/2+1)
          integer*8 :: plan
 
-         real*8,parameter :: c=299792458d0*1d9   !Speed o' light nm/s
+!        --------------------------------------------------------------
+         include 'fftw3.f03'
+!        @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
-         real*8, allocatable :: mux(:),muy(:),muz(:)
 !        --------------------------------------------------------------
 
-         include 'fftw3.f03'
          allocate (mux(ns),muy(ns),muz(ns))
 
          pi = 3.1415926535897932384626433832795d0
@@ -2492,9 +2642,14 @@ contains
                   end do
 !                 ---------------------------------------------------------------
 !                 FOURIER TRANSFORM
+!                 --------------------------------------------------------------
+!                 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+!                 DFFTW!!! VERY EXPERIMENTAL
+!                 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
                   call dfftw_plan_dft_r2c_1d(plan,ns,in,out,"FFTW_ESTIMATE")
                   call dfftw_execute_dft_r2c(plan, in, out)
                   call dfftw_destroy_plan(plan)
+!                 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 !                  t=0.0
 !                  ftix = 0.0d0
 !                  ftrx = 0.0d0
@@ -2519,10 +2674,15 @@ contains
 !                  poltens(nm,dd,fi,1)=ABS(CMPLX(ftrx,ftix,8))/Emod
 !                  poltens(nm,dd,fi,2)=ABS(CMPLX(ftry,ftiy,8))/Emod
 !                  poltens(nm,dd,fi,3)=ABS(CMPLX(ftrz,ftiz,8))/Emod
-                  poltens(nm,dd,fi,1)=1
-                  poltens(nm,dd,fi,2)=2
-                  poltens(nm,dd,fi,3)=3
+
+!                 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+!                 DFFTW!!! VERY EXPERIMENTAL
+!                 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+                  poltens(nm,dd,fi,1)=1  ! delete!
+                  poltens(nm,dd,fi,2)=2  ! delete
+                  poltens(nm,dd,fi,3)=3  ! delete
                   write(*,*) out
+!                 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
                end do
             end do
          end do
