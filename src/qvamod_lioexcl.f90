@@ -1928,7 +1928,7 @@ contains
       real*8              :: clcoords(4,nclatoms)
       real*8              :: fxyz(3,3)
       real*8              :: ftr,fti
-      real*8              :: rract(3*nqmatoms-6)  ! should be C^2 m^2/(amu V^2)
+      real*8              :: rract(lio_nml%ntdstep,3*nqmatoms-6)  ! should be C^2 m^2/(amu V^2)
       integer             :: nat
       integer             :: rrdebug
       integer             :: an
@@ -2255,25 +2255,30 @@ contains
       subroutine calc_uvvis(qvageom,qva_nml,lio_nml,nqmatoms)
          use garcha_mod
          use field_data, only: fx, fy, fz
-         use td_data, only: timedep
+         use td_data, only: timedep, ntdstep
          implicit none
 !        --------------------------------------------------------------
          type(lio_nml_type), intent(in) :: lio_nml
          type(qva_nml_type), intent(in) :: qva_nml
-         real*8,intent(in)              :: qvageom(3,nqmatoms)  ! QM atom coordinates
+         double precision,intent(in)    :: qvageom(3,nqmatoms)  ! QM atom coordinates
          integer,intent(in)             :: nqmatoms
 
-         real*8,parameter    :: spl=299792458d0*1d9   !Speed o' light nm/s
-         integer,parameter   :: nclatoms=0
+         double precision,parameter    :: spl=2.99792458d17   !Speed o' light nm/s
+         integer,parameter             :: nclatoms=0
 
-         real*8              :: alphauv(10*(qva_nml%lmax-qva_nml%lmin))
-         real*8              :: spec(10*(qva_nml%lmax-qva_nml%lmin))
-         real*8              :: fxyz(3,3)
-         real*8              :: Emod
-         real*8              :: escf
-         real*8              :: clcoords(4,nclatoms)
-         real*8              :: dipxyz(3)
-         real*8              :: lambda
+         double precision              :: alphauv(10*(qva_nml%lmax-qva_nml%lmin))
+         double precision              :: spec(lio_nml%ntdstep/2+1)
+         double precision              :: fxyz(3,3)
+         double precision              :: Emod
+         double precision              :: escf
+         double precision              :: clcoords(4,nclatoms)
+         double precision              :: dipxyz(3)
+         double precision              :: lambda
+         double precision              :: ts, tss
+         double precision              :: cnmfs,ftfac
+
+         complex*16                    :: csigma(lio_nml%ntdstep/2+1)
+
          integer             :: ierr
          integer             :: i
          integer             :: nvdf
@@ -2281,6 +2286,11 @@ contains
 
          timedep = 1
          nvdf=3*nqmatoms-6
+         ts = lio_nml%tdstep ! Step length in atomic units
+         tss = ts * 2.418884326505d-17 !conversion of time step to seconds
+         cnmfs = 2.99792458d2 ! Speed of light in nm/fs
+         ftfac=2d0*dble(lio_nml%ntdstep)*ts*2.418884326505d-2
+
 
          fxyz(1,:)=(/qva_nml%rri_fxyz,0d0,0d0/)
          fxyz(2,:)=(/0d0,qva_nml%rri_fxyz,0d0/)
@@ -2288,17 +2298,17 @@ contains
          Emod=qva_nml%rri_fxyz*514.220652d0             ! Convert to V/nm
 
          if (qva_nml%readtd == 0) then
+            ntdstep=ntdstep+199
             do i=1,3
-               fx=fxyz(i,1)
-               fy=fxyz(i,2)
-               fz=fxyz(i,3)
-
+               Fx=fxyz(i,1)
+               Fy=fxyz(i,2)
+               Fz=fxyz(i,3)
                call SCF_in(escf,qvageom,clcoords,nclatoms,dipxyz)
             end do
          end if
 
-         call uvtdanalyze(lio_nml%ntdstep,lio_nml%tdstep,qva_nml%lmin,&
-                 qva_nml%lmax,qva_nml%rrint_damp,nvdf,Emod,spec)
+         call uvtdfftw(lio_nml%ntdstep,lio_nml%tdstep,qva_nml%lmin,&
+                 qva_nml%lmax,qva_nml%rrint_damp,nvdf,Emod,spec,csigma)
 
          open(UNIT=99, FILE='uvvis.dat', ACTION='WRITE', IOSTAT=ierr)
          if (ierr /= 0) then
@@ -2306,14 +2316,42 @@ contains
             STOP
          end if
 
-         do i=1,10*(qva_nml%lmax-qva_nml%lmin)
-            lambda = dble((0.1*i) + qva_nml%lmin)
-            write(99,100) lambda, spec(i)
+         do i=1,1+lio_nml%ntdstep/2
+         !   write(99,100) ftfac*cnmfs/DBLE(i), spec(i)
+            write(99,100) ftfac*cnmfs/DBLE(i), DBLE(i)*spec(i)/(ftfac*cnmfs)
          end do
 
          close(unit=99)
 
-100      format (1x,F14.6,2x,F14.6)
+100      format (1x,D14.6,2x,D14.6)
+
+
+!       ------------------------------------------------------------------------
+!       DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+
+
+         ts = lio_nml%tdstep ! Step length in atomic units
+         cnmfs = 2.99792458d2 ! Speed of light in nm/fs
+         ftfac=2d0*dble(lio_nml%ntdstep)*ts*2.418884326505d-2
+
+
+         open(UNIT=101, FILE='complex_uvvis.dat', ACTION='WRITE', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A,A)') 'COULD NOT OPEN FILE ','uvvis.dat'
+            STOP
+         end if
+
+         do i=1,1+lio_nml%ntdstep/2
+            write(101,101) ftfac*cnmfs/DBLE(i), real(csigma(i)), aimag(csigma(i)),abs(csigma(i)), atan2(aimag(csigma(i)),real(csigma(i)))
+         end do
+
+101      format (1x,D14.6,2x,D14.6,2x,D14.6,2x,D14.6,2x,D14.6)
+
+         close(101)
+
+!       DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+!       ------------------------------------------------------------------------
+
 
       end subroutine
 
@@ -2351,38 +2389,6 @@ contains
 
       end subroutine
 
-!      subroutine printrract(rract,nvdf,hii)
-!         implicit none
-!!        --------------------------------------------------------------
-!         integer,intent(in)       :: nvdf
-!         real*8,intent(in)        :: rract(nvdf)
-!         real*8,intent(in)        :: hii(nvdf)
-!         integer                  :: nm,i
-!         real*8                   :: sign_hii(nvdf)
-!         real*8                   :: freq(nvdf)
-!         real*8, PARAMETER        :: h2cm=219475.64d0 !Convert Hartree to cm-1
-!!        --------------------------------------------------------------
-!
-!         write(77,'(A)')
-!         write(77,'(A)') ' --------------------------------------------  '
-!         write(77,'(A)') '         HARMONIC FREQUENCIES AND              '
-!         write(77,'(A)') ' RESONANT RAMAN ACTIVITIES S=45|a|^2 + 7|g|^2  '
-!         write(77,'(A)') ' --------------------------------------------  '
-!         write(77,'(A)') ' MODE     FREQUENCIES    RR ACTIVITIES         '
-!
-!!        Convert frequecies to wavenumbers
-!
-!         sign_hii=1.0D00
-!         do nm = 1,nvdf
-!            freq(nm) = sign(sign_hii(nm),hii(nm))*h2cm*sqrt(abs(hii(nm)))
-!         end do
-!
-!         do nm=1,nvdf
-!            write(77,'(I3,F10.2,D18.6)') nm, freq(nm), rract(nm)
-!         end do
-!
-!      end subroutine
-
       subroutine rractivity(dalpha,nvdf,ns,rract)
          implicit none
 !        --------------------------------------------------------------
@@ -2391,29 +2397,44 @@ contains
          complex*16,                intent(in)       :: dalpha( ns/2+1, 3, 3, nvdf ) ! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
          double precision,          intent(out)      :: rract(ns/2+1,nvdf)
 
-         double precision                            :: isot(ns/2+1,nvdf)
-         double precision                            :: anis(ns/2+1,nvdf)
+         double precision                            :: isot(ns/2+1)
+         double precision                            :: anis(ns/2+1)
          double precision                            :: y1(ns/2+1)
          double precision                            :: y2(ns/2+1)
          double precision                            :: y3(ns/2+1)
          double precision                            :: y4(ns/2+1)
          integer                                     :: nm
 !        --------------------------------------------------------------
+         write(*,'(A,I4)') "rractivity() nvdf = ", nvdf
+         write(*,'(A)') "before rract=0d0"
+         rract(:,:) = 0d0
          do nm=1,nvdf
+            isot(:) =  0d0
+            anis(:) =  0d0
+            y1(:)   = 0d0
+            y2(:)   = 0d0
+            y3(:)   = 0d0
+            y4(:)   = 0d0
 !           ISOTROPIC DYNAMIC POLARIZABILITY
-            isot(:,nm)=ABS(dalpha(:,1,1,nm)+dalpha(:,2,2,nm)+dalpha(:,3,3,nm))**2/9d0
+            write(*,'(A,I4)') "rractivity() line 2372; main loop nº = ", nm
+            isot(:)=ABS(dalpha(:,1,1,nm)+dalpha(:,2,2,nm)+dalpha(:,3,3,nm))**2/9d0
+!                     write(999,*) '@rractivity isot(:) = ', isot
+            write(*,'(A,I4)') "after isot"
 
 !           ANISOTROPIC DYNAMIC POLARIZABILITY
             y1(:)=ABS(dalpha(:,1,1,nm)-dalpha(:,2,2,nm))**2
             y2(:)=ABS(dalpha(:,2,2,nm)-dalpha(:,3,3,nm))**2
             y3(:)=ABS(dalpha(:,3,3,nm)-dalpha(:,1,1,nm))**2
             y4(:)=6d0*(ABS(dalpha(:,1,2,nm))**2+ABS(dalpha(:,2,3,nm))**2+ABS(dalpha(:,3,1,nm))**2)
-            anis(:,nm)=0.5d0*(y1(:)+y2(:)+y3(:)+y4(:))
+            anis(:)=0.5d0*(y1(:)+y2(:)+y3(:)+y4(:))
+            write(*,'(A,I4)') "after anis"
 
 !           RESONANT RAMAN ACTIVITY "S"
-            rract(:,nm)=45d0*isot(:,nm) + 7d0*anis(:,nm)
-
-!           RESONANT RAMAN CROSS SECTION...
+            isot(:) = isot(:)*4.5d1
+            anis(:) = anis(:)*7d0
+            rract(:,nm)=isot(:) + anis(:)
+            write(*,'(A,I4)') "after rract"
+            write(999,'(A,99999D12.4)') "rract(:,nm) = ", rract(:,nm)
          end do
 
       end subroutine
@@ -2478,13 +2499,13 @@ contains
          double precision                  :: ftrx,ftry,ftrz
          double precision                  :: tx,ty,tz
          double precision                  :: in(ns)
+         double precision                  :: tmp(ns)
          double precision,parameter        :: c=299792458d0*1d9   !Speed o' light nm/s
 
          integer                           :: i, j, k, di
          integer                           :: nm,dd,fi
          integer                           :: step
          integer                           :: ierr
-         integer                           :: tmp
 
          complex*16                        :: out(ns/2+1)
          integer*8                         :: plan
@@ -2497,15 +2518,15 @@ contains
 !        --------------------------------------------------------------
 
          allocate (  mu(ns,3) )
-         allocate (  alpha( ns/2+1, 3, 2 )  )
+         allocate (  alpha( ns/2+1, 2, 3 )  )
 !                              ^    ^  ^
 !                      spectra_|    |  |
-!                       dipole xyz _|  |
-!                          stencil ____|
+!                       stencil ____|  |
+!                          dipole xyz _|
 
          pi = 3.1415926535897932384626433832795d0
-         tss = ts * 2.418884326505d0 * 1.E-17 !conversion of time step to seconds
-         damps = damp * 1.E15
+         tss = ts * 2.418884326505d-17 !conversion of time step to seconds
+         damps = damp * 1.d15
 
 !        DEBUG
          write(77,'(A,D13.6)') 'Emod = ',Emod
@@ -2529,7 +2550,7 @@ contains
 !                 ---------------------------------------------------------------
                   read(89,*)  ! read header
                   do step=1,ns
-                     read(89,*) mu(step,1), mu(step,2), mu(step,3),tmp
+                     read(89,*) tmp(step), mu(step,1), mu(step,2), mu(step,3)
                   end do
 
 !                 DIFFERENTIATE AND FOURIER TRANSFORM
@@ -2537,11 +2558,12 @@ contains
                   do di=1,3     ! dipole spacial direction x, y, z
 !                    Take time derivative
                      do step=1,ns-1  ! Step of dipole trajectory
-                        mu(step,di)=(mu(step+1,di)-mu(step,di))/tss
+                        mu(step,di)=(mu(step+1,di)-mu(step,di))
                      end do
+                     mu(ns,di)=mu(step-1,di)
 !                    Fourier transform
                      in=0d0
-                     in=mu(:,di)
+                     in(:)=mu(:,di)
                      call dfftw_plan_dft_r2c_1d(plan,ns,in,out,"FFTW_ESTIMATE")
                      call dfftw_execute_dft_r2c(plan, in, out)
                      call dfftw_destroy_plan(plan)
@@ -2688,6 +2710,117 @@ contains
          end do
 
          close(unit=89)
+
+      end subroutine
+
+      subroutine uvtdfftw(ns,ts,lmin,lmax,damp,nvdf,Emod,sigma,csigma)
+         use, intrinsic :: iso_c_binding
+         implicit none
+
+!        --------------------------------------------------------------
+         integer,intent(in)       :: ns    ! Number of steps.
+         integer,intent(in)       :: nvdf  ! Number of steps.
+         integer,intent(in)       :: lmin  ! Number of steps.
+         integer,intent(in)       :: lmax  ! Number of steps.
+         double precision,intent(in)        :: ts    ! Time step (fs).
+         double precision,intent(in)        :: damp  ! Damping factor (1/fs).
+         double precision,intent(in)        :: Emod  ! External field module (V/nm).
+         double precision,intent(out)       :: sigma(ns/2+1) ! absorption cross section.
+         complex*16,intent(out)             :: csigma(ns/2+1) ! complex absorption cross section.
+
+         double precision       :: nu
+         double precision       :: t
+         double precision       :: tss
+         double precision       :: ene
+         double precision       :: damps
+         double precision       :: pi
+         double precision       :: lambda
+         double precision       :: ftix,ftiy,ftiz
+         double precision       :: ftrx,ftry,ftrz
+         double precision       :: tx,ty,tz
+         double precision       :: fti,ftr
+         double precision       :: tmp
+
+!        fftw variables
+!        --------------------------------------------------------------
+         double precision       :: in(ns)
+         complex*16             :: out(ns/2+1)
+         integer*8              :: plan
+!        --------------------------------------------------------------
+
+         integer      :: i, j, k
+         integer      :: nm,dd,fi,di
+         integer      :: step
+         integer      :: ierr
+
+         double precision,parameter :: c=299792458d0*1d9   !Speed o' light nm/s
+
+         double precision              :: mux,muy,muz
+         double precision, allocatable :: mu(:,:)
+!         double precision, allocatable :: sigma(:)
+!        --------------------------------------------------------------
+         complex*16,       allocatable     :: alpha(:,:,:)
+!         complex*16,       allocatable     :: csigma(:)
+
+!        --------------------------------------------------------------
+         include 'fftw3.f03'
+!        --------------------------------------------------------------
+
+         allocate (  mu(ns,3) )
+!         allocate (  csigma( ns/2+1 ) )
+         allocate (  alpha( ns/2+1, 3 , 3 )  )
+!                              ^    ^   ^
+!                      spectra_|    |   |
+!                       dipole xyz _|   |
+!                         field xyz ____|
+
+         pi = 3.1415926535897932384626433832795d0
+         tss = ts * 2.418884326505d-17 !conversion of time step to seconds
+
+!        OPEN TRAJECTORY FILES
+!        ---------------------------------------------------------------
+         open(UNIT=89, FILE='dipole_moment_td', ACTION='READ', IOSTAT=ierr)
+         if (ierr /= 0) then
+            write(77,'(A)') 'COULD NOT OPEN FILE dipole_moment_td'
+            STOP
+         end if
+
+!        ---------------------------------------------------------------
+!        READ DIPOLES
+!         nu =  c/laserlambda            ! nu in Hz, lambda in nm, c in nm/s
+         do fi=1,3                   ! Spatial orientation (x,y,z) of the incident field.
+            alpha=0d0
+
+!           READ DIPOLES FROM FILE
+!           ---------------------------------------------------------------
+            read(89,*)  ! read header
+            do step=1,ns
+               read(89,*) tmp, mu(step,1), mu(step,2), mu(step,3)
+               mu(step,:)=mu(step,:)*exp(-damp*step)
+            end do
+
+!           DIFFERENTIATE AND FOURIER TRANSFORM
+!           ---------------------------------------------------------------
+            do di=1,3     ! dipole spacial direction x, y, z
+!              Take time derivative
+               do step=1,ns-1  ! Step of dipole trajectory
+                  mu(step,di)=(mu(step+1,di)-mu(step,di))
+               end do
+               mu(ns,di)=mu(step-1,di)
+!              Fourier transform
+               in=0d0
+               in(:)=mu(:,di)
+               call dfftw_plan_dft_r2c_1d(plan,ns,in,out,"FFTW_ESTIMATE")
+               call dfftw_execute_dft_r2c(plan, in, out)
+               call dfftw_destroy_plan(plan)
+               alpha(:,di,fi) = out
+            end do
+         end do
+
+        csigma(:)=0d0
+        csigma(:)=alpha(:,1,1)+alpha(:,2,2)+alpha(:,3,3)
+        sigma(:)=ABS(csigma(:))/3.0d0
+
 
       end subroutine
 
