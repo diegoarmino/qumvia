@@ -2200,13 +2200,20 @@ contains
 
             ! This loop generates a TD calculation for Ex Ey and Ez separatedly.
             do i=1,3
+               write(77,'(A,I3)') "rr_rst_step = ", qva_nml%rr_rst_step
+               write(77,'(A,I3)') "step = ", step
+               if (step < qva_nml%rr_rst_step) then
+                  step = step + 1
+                  cycle
+               end if
+               write(77,'(A,I3)') "STARTING STEP No ", step
                Fx=fxyz(i,1)
                Fy=fxyz(i,2)
                Fz=fxyz(i,3)
                call SCF_in(escf,Xm,clcoords,nclatoms,dipxyz)
+               step = step + 1
             end do
 !           ------------------------------------------------------------
-            step = step + 1
 
          end do
       end do

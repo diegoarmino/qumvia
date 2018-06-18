@@ -58,6 +58,7 @@
       integer :: lmin
       integer :: lmax
       integer :: readtd
+      integer :: rr_rst_step
       real*8  :: csiterfactor
       real*8  :: ethresh
       real*8  :: resthresh
@@ -109,6 +110,7 @@
           integer :: lmin
           integer :: lmax
           integer :: readtd
+          integer :: rr_rst_step
           real*8  :: csiterfactor
           real*8  :: ethresh
           real*8  :: resthresh
@@ -124,7 +126,7 @@
           vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
           nmorse,nsinh,hess_h,hess_norder,rraman,laserfreq,rrint_damp,rri_fxyz,&
-          uvvis,lmin,lmax,readtd
+          uvvis,lmin,lmax,readtd,rr_rst_step
 
           integer :: ifind, ierr
 
@@ -159,6 +161,7 @@
           lmin=100
           lmax=900
           readtd=0
+          rr_rst_step=-1
 
        !  READ NAMELIST
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
@@ -203,6 +206,7 @@
           qva_nml%lmin=lmin
           qva_nml%lmax=lmax
           qva_nml%readtd=readtd
+          qva_nml%rr_rst_step=rr_rst_step
 
        end subroutine get_qva_nml
 
@@ -234,6 +238,7 @@
           write(77,'(A,I3)') '  lmin = ',qva_nml%lmin
           write(77,'(A,I3)') '  lmax = ',qva_nml%lmax
           write(77,'(A,I3)') '  readtd = ',qva_nml%readtd
+          write(77,'(A,I3)') '  rr_rst_step = ',qva_nml%rr_rst_step
           write(77,'(A,F7.2)') '  csiterfactor = ',qva_nml%csiterfactor
           write(77,'(A,F7.3)') '  vscf_gauswidth = ',qva_nml%vscf_gauswidth
           write(77,'(A,F7.0)') '  ethresh = ',qva_nml%ethresh
@@ -1885,7 +1890,7 @@
        format2='(16F11.5)'
 
  !     DISTRIBUTED GAUSSIAN BASIS SET
- !     Gaussians are placed in Gauss-Hermite quadrature points, and 
+ !     Gaussians are placed in Gauss-Hermite quadrature points, and
  !     scaled so their centers coincide with the nodes of an harmonic
  !     oscillator wavefunction of vibrational quantum number equal to
  !     the number of gaussians specified by the user (only 16 for now).
