@@ -1928,7 +1928,7 @@ contains
       real*8              :: clcoords(4,nclatoms)
       real*8              :: fxyz(3,3)
       real*8              :: ftr,fti
-      real*8              :: rract(lio_nml%ntdstep,3*nqmatoms-6)  ! should be C^2 m^2/(amu V^2)
+      real*8              :: rract(lio_nml%ntdstep/2+1,3*nqmatoms-6)  ! should be C^2 m^2/(amu V^2)
       integer             :: nat
       integer             :: rrdebug
       integer             :: an
@@ -2005,7 +2005,7 @@ contains
 
 !     PRINT RESONANT RAMAN ACTIVITY
 !     ------------------------------------------------------------------
-      call printrract(rract,nvdf,hii,lio_nml%ntdstep)
+      call printrract(lio_nml,rract,nvdf,hii,lio_nml%ntdstep)
 
       end subroutine
 
@@ -2362,17 +2362,20 @@ contains
 
       end subroutine
 
-      subroutine printrract(rract,nvdf,hii,ns)
+      subroutine printrract(lio_nml,rract,nvdf,hii,ns)
          implicit none
 !        --------------------------------------------------------------
-         integer,intent(in)       :: nvdf
-         integer,intent(in)       :: ns
-         real*8,intent(in)        :: hii(nvdf)
-         real*8,intent(in)        :: rract(ns,nvdf)
-         integer                  :: nm,i
-         real*8                   :: sign_hii(nvdf)
-         real*8                   :: freq(nvdf)
-         real*8, PARAMETER        :: h2cm=219475.64d0 !Convert Hartree to cm-1
+         type(lio_nml_type),  intent(in)        :: lio_nml
+         integer,             intent(in)        :: nvdf
+         integer,             intent(in)        :: ns
+         double precision,    intent(in)        :: hii(nvdf)
+         double precision,    intent(in)        :: rract(ns/2+1,nvdf)
+!        --------------------------------------------------------------
+         double precision, PARAMETER            :: h2cm=219475.64d0  ! Convert hartee/bohr^2/emu to cm-1
+         double precision                       :: sign_hii(nvdf)
+         double precision                       :: freq(nvdf)
+         double precision                       :: cnmfs,ftfac,ts,tss
+         integer                                :: nm,i
 !        --------------------------------------------------------------
 
          write(77,'(A)')
@@ -2382,6 +2385,11 @@ contains
          write(77,'(A)') ' --------------------------------------------  '
 
 !        Convert frequecies to wavenumbers
+         ts = lio_nml%tdstep ! Step length in atomic units
+         tss = ts * 2.418884326505d-17 !conversion of time step to seconds
+         cnmfs = 2.99792458d2 ! Speed of light in nm/fs
+!         ftfac=2d0*dble(lio_nml%ntdstep)*ts*2.418884326505d-2
+         ftfac=dble(lio_nml%ntdstep)*ts*2.418884326505d-2
 
          sign_hii=1.0D00
          do nm = 1,nvdf
@@ -2390,8 +2398,9 @@ contains
 
          write(77,'(A,999I18)') 'NORMAL MODE', (nm,nm=1,nvdf)
          write(77,'(A,999F18.2)') 'FREQUENCIES', (freq(nm),nm=1,nvdf)
-         do i=1,ns
-            write(77,'(I11,999D18.6)') i,(rract(i,nm),nm=1,nvdf)
+         do i=1,ns/2+1
+!            write(77,'(999D18.6)') ftfac*cnmfs/DBLE(i), (DBLE(i)*rract(i,nm)/(ftfac*cnmfs),nm=1,nvdf)
+            write(77,'(999D18.6)') ftfac*cnmfs/DBLE(i), (rract(i,nm),nm=1,nvdf)
          end do
 
       end subroutine
