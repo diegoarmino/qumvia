@@ -50,6 +50,7 @@ program qumvia_main
 #else
    use qvamod_lio
    use qvamod_lioexcl
+   use optimization_mod, only: optimize
    use garcha_mod, only: natom, nsol, Iz, basis_set, fitting_set, &
                          int_basis, omit_bas, verbose, writeforces,&
                          r, rqm
@@ -165,6 +166,13 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
       if (is_dip_open) then
          close(134)
       end if
+
+      call lio_finalize()
+      STOP
+   ELSE IF (qva_nml%nhess .eq. 4) THEN
+
+!     COMPUTE HARMONIC SPECTRA WITH RESONANT RAMAN INTENSITIES.
+      call optimize(qva_nml,nqmatoms,qmcoords,xopt,optimizer)
 
       call lio_finalize()
       STOP
