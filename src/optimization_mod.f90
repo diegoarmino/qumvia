@@ -37,7 +37,8 @@ public :: optimize
 contains
    include "optimizer_main.f90"
    include "steepest_descent.f90"
-!   include "conjugated_gradient.f90"
+   include "conjugated_gradient.f90"
+   include "quasi_newton.f90"
 
 
 end module optimization_mod
