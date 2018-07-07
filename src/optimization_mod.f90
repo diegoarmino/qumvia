@@ -29,11 +29,15 @@ module optimization_mod
    !
    ! QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
    ! ----------------------------------------------------------------
+
 private
-public :: steepest_descent.f90
+
+public :: optimize
+
 contains
    include "optimizer_main.f90"
    include "steepest_descent.f90"
-   include "conjugated_gradient.f90"
+!   include "conjugated_gradient.f90"
+
 
 end module optimization_mod

@@ -50,7 +50,7 @@ program qumvia_main
 #else
    use qvamod_lio
    use qvamod_lioexcl
-   use optimization_mod, only: optimize
+   use optimization_mod! , only: optimize
    use garcha_mod, only: natom, nsol, Iz, basis_set, fitting_set, &
                          int_basis, omit_bas, verbose, writeforces,&
                          r, rqm
@@ -67,7 +67,8 @@ program qumvia_main
    integer   :: nclatoms
    integer   :: qmcharge
    integer, allocatable :: at_numbers(:)
-   real*8, allocatable :: qvageom(:,:)
+   double precision, allocatable :: qvageom(:,:)
+   double precision, allocatable :: xopt(:,:)
    type(lio_nml_type), save  :: lio_nml
    double precision :: a0  =   0.5291771D00         ! bohr radius
    integer :: i,j
@@ -170,10 +171,9 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
       call lio_finalize()
       STOP
    ELSE IF (qva_nml%nhess .eq. 4) THEN
-
-!     COMPUTE HARMONIC SPECTRA WITH RESONANT RAMAN INTENSITIES.
-      call optimize(qva_nml,nqmatoms,qmcoords,xopt,optimizer)
-
+!     Perform geometry optimization.
+      allocate(xopt(3,nqmatoms))
+      call optimize(qva_nml,nqmatoms,at_numbers,qvageom,xopt)
       call lio_finalize()
       STOP
 #endif

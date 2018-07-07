@@ -15,9 +15,9 @@ LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(LIO_HOME)/g2g -lg2g -L$(LIO_HOME)/lioamber -
 LIOFLAGS= -I$(LIO_HOME)/lioamber -I$(LIO_HOME)/lioamber/obj
 
 
-cpu: clean mkdirs qumvia.cpu mvdirs
+cpu: mkdirs qumvia.cpu mvdirs
 
-lio: clean mkdirs qumvia.lio mvdirs
+lio: mkdirs qumvia.lio mvdirs
 
 mkdirs:
 	if [ ! -d "$(BINDIR)" ]; then mkdir $(BINDIR); fi
@@ -26,24 +26,27 @@ mkdirs:
 qumvia.cpu: M_kracken.o qvamod_common.o qvamod_cpu.o qvamain_cpu.o
 	$(FC) $(FFLAGS) -o $@ $^ $(FLIBS)
 
-qumvia.lio: M_kracken.o qvamod_common.o qvamod_lioexcl.o qvamod_lio.o qvamain_lio.o
+qumvia.lio: M_kracken.o qvamod_common.o opt_data_mod.o optimization_mod.o qvamod_lioexcl.o qvamod_lio.o qvamain_lio.o
 	$(FC) $(FFLAGS) -o $@ $^ $(FLIBS) $(LIOFLAGS) $(LIOLIBS)
 
 #----------------------------------------------------------------------------------------
 # KRACKEN COMMAND LINE PARSER
 #----------------------------------------------------------------------------------------
+
 M_kracken.o: M_kracken.f90
 	$(FC) $(FFLAGS) -c M_kracken.f90
 
 #----------------------------------------------------------------------------------------
 # COMMON COMPILATION RULES
 #----------------------------------------------------------------------------------------
+
 qvamod_common.o: qvamod_common.f90
 	$(FC) $(FFLAGS) -c qvamod_common.f90 $(FLIBS)
 
 #----------------------------------------------------------------------------------------
 # CPU COMPILATION RULES
 #----------------------------------------------------------------------------------------
+
 qvamod_cpu.o: qvamod_common.mod qvamod_alt.f90
 	$(FC) -fpp -Dqvacpu $(FFLAGS) -c qvamod_alt.f90 $(FLIBS) -o qvamod_cpu.o
 
@@ -53,6 +56,13 @@ qvamain_cpu.o: qvamod_common.mod qvamod_cpu.mod qvamain.f90
 #----------------------------------------------------------------------------------------
 # LIO COMPILATION RULES
 #----------------------------------------------------------------------------------------
+
+opt_data_mod.o: opt_data_mod.f90
+	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c opt_data_mod.f90 $(FLIBS) $(LIOLIBS) -o opt_data_mod.o
+
+optimization_mod.o: opt_data_mod.mod qvamod_common.mod optimization_mod.f90
+	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c optimization_mod.f90 $(FLIBS) $(LIOLIBS) -o optimization_mod.o
+
 qvamod_lioexcl.o: qvamod_common.mod qvamod_lioexcl.f90
 	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c qvamod_lioexcl.f90 $(FLIBS) $(LIOLIBS) -o qvamod_lioexcl.o
 
@@ -60,7 +70,7 @@ qvamod_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_alt.f90
 	$(FC) -fpp -Dqvalio $(FFLAGS) -c qvamod_alt.f90 $(FLIBS) $(LIOLIBS) \
 		-o qvamod_lio.o
 
-qvamain_lio.o: qvamod_common.mod qvamod_lioexcl.mod qvamod_lio.mod qvamain.f90
+qvamain_lio.o: optimization_mod.mod qvamod_common.mod qvamod_lioexcl.mod qvamod_lio.mod qvamain.f90
 	$(FC) -fpp -Dqvalio $(FFLAGS) $(LIOFLAGS) -c qvamain.f90 $(FLIBS) $(LIOLIBS) \
 		-o qvamain_lio.o
 
