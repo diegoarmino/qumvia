@@ -38,8 +38,9 @@ contains
 
    include "optimizer_main.f90"
    include "steepest_descent.f90"
-   include "conjugated_gradient.f90"
+   include "conjugate_gradient.f90"
    include "quasi_newton.f90"
    include "opt_initialize.f90"
+   include "opt_check_convergence.f90"
 
 end module optimization_mod

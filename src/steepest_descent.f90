@@ -1,10 +1,12 @@
 subroutine steepest_descent()
-   use opt_data_mod, only :  Xnew, dXnew, Xold, lambda, max_opt_steps
+   use opt_data_mod, only :  Xnew, dXnew, Xold, dXold, lambda, max_opt_steps,  &
+                             stepno, escf, eold, dXnew_vec, nat
    implicit none
 
 !  -----------------------------------------------------------------------------
    integer                            :: i,j,k
    double precision                   :: svec(3,nat)
+   double precision                   :: gnorm
 !  -----------------------------------------------------------------------------
    double precision,external          :: DNRM2
 !  -----------------------------------------------------------------------------

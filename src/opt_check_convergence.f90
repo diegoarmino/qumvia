@@ -1,9 +1,10 @@
-subroutine opt_check_convergence(nat,at_numbers,converged)
-   use opt_data_mod, only : dXnew, converged, qva_nml
+subroutine opt_check_convergence(qva_nml,nat,at_numbers,converged)
+   use opt_data_mod, only : dXnew, dXnew_vec, converged
    use qvamod_common, only: qva_nml_type
    implicit none
 
 !  -----------------------------------------------------------------------------
+   type(qva_nml_type), intent(in)     :: qva_nml
    integer,            intent(in)     :: nat
    integer,            intent(in)     :: at_numbers(nat)
    logical,            intent(inout)  :: converged
@@ -16,18 +17,18 @@ subroutine opt_check_convergence(nat,at_numbers,converged)
    double precision,external          :: IDAMAX
 !  -----------------------------------------------------------------------------
 
-! Change gradient into vector format.
-  do j=1,nat
-  do k=1,3
-    dXnew_vec(3*(j-1)+k)   =  dXnew(k,j)
-  end do
-  end do
+!  Change gradient into vector format.
+   do j=1,nat
+   do k=1,3
+      dXnew_vec(3*(j-1)+k)   =  dXnew(k,j)
+   end do
+   end do
 
-! Check convergence
-  rms   = DNRM2(3*nat,dXnew_vec,1)
-  rms   = rms/SQRT(3*DBLE(nat))
-  igmax = idamax(3*nat,dXnew_vec,1)
+!  Check convergence
+   rms   = DNRM2(3*nat,dXnew_vec,1)
+   rms   = rms/SQRT(3*DBLE(nat))
+   igmax = idamax(3*nat,dXnew_vec,1)
 
-  if(dX_vec(igmax) < qva_nml%maxg_thresh .AND. rms < qva_nml%rms_thresh) converged = .TRUE.
+   if(dXnew_vec(igmax) < qva_nml%maxg_thresh .AND. rms < qva_nml%rms_thresh) converged = .TRUE.
 
-end subroutine conjugate_gradient
+end subroutine opt_check_convergence

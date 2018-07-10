@@ -1,6 +1,6 @@
 subroutine quasi_newton()
    use opt_data_mod, only : dXold_vec, dXnew_vec, Xold_vec, Xnew_vec, Hold, &
-                            lambda, max_opt_steps
+                            lambda, max_opt_steps, stepno, Xnew, dXnew, nat
    implicit none
 
 !  -----------------------------------------------------------------------------
@@ -8,6 +8,7 @@ subroutine quasi_newton()
    integer                            :: igmax
    double precision                   :: rms, gnorm
    double precision                   :: vnew(3,nat)
+   double precision                   :: vnew_vec(3*nat) ! dXnew-dXold vector format
    double precision                   :: dr(3*nat) ! Xnew-Xold vector format
    double precision                   :: dg(3*nat) ! dXnew-dXold vector format
    double precision                   :: dgdr      ! scalar product dg.dr
@@ -15,9 +16,6 @@ subroutine quasi_newton()
    double precision                   :: Tmp(3*nat,3*nat) ! Temporary matrix
    double precision                   :: Hnew(3*nat,3*nat) ! dXnew-dXold vector format
 !  -----------------------------------------------------------------------------
-   double precision,external          :: DGEMM
-   double precision,external          :: DGEMV
-   double precision,external          :: DGER
    double precision,external          :: DDOT
 !  -----------------------------------------------------------------------------
 
@@ -42,7 +40,7 @@ subroutine quasi_newton()
 
 !     Computing external products of numerators divided by denominators.
       num1=0d0
-      dger(3*nat,3*nat,dgdr,dr,1,dg,1,num1,3*nat)
+      call dger(3*nat,3*nat,dgdr,dr,1,dg,1,num1,3*nat)
 
 !     Computing (I-num1) where I=identity matrix.
       do i=1,3*nat
@@ -52,15 +50,15 @@ subroutine quasi_newton()
 !     Computing first term of the formula (I-num1) Hk (I-num1)^T
 !     First term
       Tmp   = 0d0
-      dgemm('N','N',3*nat,3*nat,3*nat,1d0,num1,3*nat,Hold,3*nat,1d0,Tmp,3*nat)
-      dgemm('N','T',3*nat,3*nat,3*nat,1d0,Tmp,3*nat,num1,3*nat,1d0,Hnew,3*nat)
+      call dgemm('N','N',3*nat,3*nat,3*nat,1d0,num1,3*nat,Hold,3*nat,1d0,Tmp,3*nat)
+      call dgemm('N','T',3*nat,3*nat,3*nat,1d0,Tmp,3*nat,num1,3*nat,1d0,Hnew,3*nat)
 
 !     Computing second term of the formula dr.dr^T/(dg.dr) and adding to Hnew
-      dger(3*nat,3*nat,dgdr,dr,1,dr,1,Hnew,3*nat)
+      call dger(3*nat,3*nat,dgdr,dr,1,dr,1,Hnew,3*nat)
 
 !     Computing geometry updater v = Hnew.dg
       vnew_vec=0d0
-      dgemv('N',3*nat,3*nat,1d0,Hnew,3*nat,dg,1,1d0,vnew_vec,1)
+      call dgemv('N',3*nat,3*nat,1d0,Hnew,3*nat,dg,1,1d0,vnew_vec,1)
       do j=1,nat
       do k=1,3
          vnew(k,j)=vnew_vec(3*(j-1)+k)
@@ -68,7 +66,7 @@ subroutine quasi_newton()
       end do
 
    else
-      vnew = -lambda*dX
+      vnew = -lambda*dXnew
       Hold = 0d0
       do i=1,3*nat
          Hold(i,i) = 1d0
@@ -85,4 +83,4 @@ subroutine quasi_newton()
    Xold_vec  = Xnew_vec
    Hold      = Hnew
 
-end subroutine conjugate_gradient
+end subroutine quasi_newton

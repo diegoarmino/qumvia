@@ -38,39 +38,41 @@
            &  ssvscf2, csVCI2,qva_cli_type,convertQFF
 
     type qva_nml_type
-      integer :: nhess
-      real*8  :: vscf_gauswidth
-      integer :: vci_qmax1
-      integer :: vci_qmax2
-      integer :: vci_qmax3
-      integer :: vci_qmax4
-      integer :: qva_naddref
-      integer :: qumvia_qff
-      integer :: qumvia_nmc
-      integer :: qva_extprog
-      integer :: doconfsel
-      integer :: csdepth
-      integer :: nmorse
-      integer :: nsinh
-      integer :: hess_norder
-      integer :: rraman
-      integer :: uvvis
-      integer :: lmin
-      integer :: lmax
-      integer :: readtd
-      integer :: rr_rst_step
-      integer :: max_opt_steps
-      real*8  :: csiterfactor
-      real*8  :: ethresh
-      real*8  :: resthresh
-      real*8  :: selcut1
-      real*8  :: selcut2
-      real*8  :: qva_dstep
-      real*8  :: hess_h
-      real*8  :: laserfreq
-      real*8  :: rrint_damp
-      real*8  :: rri_fxyz
-      character(4) :: opt_type
+      integer           :: nhess
+      real*8            :: vscf_gauswidth
+      integer           :: vci_qmax1
+      integer           :: vci_qmax2
+      integer           :: vci_qmax3
+      integer           :: vci_qmax4
+      integer           :: qva_naddref
+      integer           :: qumvia_qff
+      integer           :: qumvia_nmc
+      integer           :: qva_extprog
+      integer           :: doconfsel
+      integer           :: csdepth
+      integer           :: nmorse
+      integer           :: nsinh
+      integer           :: hess_norder
+      integer           :: rraman
+      integer           :: uvvis
+      integer           :: lmin
+      integer           :: lmax
+      integer           :: readtd
+      integer           :: rr_rst_step
+      integer           :: max_opt_steps
+      double precision  :: csiterfactor
+      double precision  :: ethresh
+      double precision  :: resthresh
+      double precision  :: selcut1
+      double precision  :: selcut2
+      double precision  :: qva_dstep
+      double precision  :: hess_h
+      double precision  :: laserfreq
+      double precision  :: rrint_damp
+      double precision  :: rri_fxyz
+      double precision  :: maxg_thresh
+      double precision  :: rms_thresh
+      character(4)      :: opt_type
     end type qva_nml_type
 
     type qva_cli_type
@@ -92,82 +94,87 @@
           character(99),intent(in)        :: qvain
           type(qva_nml_type), intent(out) :: qva_nml
 
-          integer :: nhess
-          real*8  :: vscf_gauswidth
-          integer :: vci_qmax1
-          integer :: vci_qmax2
-          integer :: vci_qmax3
-          integer :: vci_qmax4
-          integer :: qva_naddref
-          integer :: qumvia_qff
-          integer :: qumvia_nmc
-          integer :: qva_extprog
-          integer :: doconfsel
-          integer :: csdepth
-          integer :: nmorse
-          integer :: nsinh
-          integer :: hess_norder
-          integer :: rraman
-          integer :: uvvis
-          integer :: lmin
-          integer :: lmax
-          integer :: readtd
-          integer :: rr_rst_step
-          integer :: max_opt_steps
-          real*8  :: csiterfactor
-          real*8  :: ethresh
-          real*8  :: resthresh
-          real*8  :: selcut1
-          real*8  :: selcut2
-          real*8  :: qva_dstep
-          real*8  :: hess_h
-          real*8  :: laserfreq
-          real*8  :: rrint_damp
-          real*8  :: rri_fxyz
-          character(4) :: opt_type
+          integer             :: nhess
+          integer             :: vci_qmax1
+          integer             :: vci_qmax2
+          integer             :: vci_qmax3
+          integer             :: vci_qmax4
+          integer             :: qva_naddref
+          integer             :: qumvia_qff
+          integer             :: qumvia_nmc
+          integer             :: qva_extprog
+          integer             :: doconfsel
+          integer             :: csdepth
+          integer             :: nmorse
+          integer             :: nsinh
+          integer             :: hess_norder
+          integer             :: rraman
+          integer             :: uvvis
+          integer             :: lmin
+          integer             :: lmax
+          integer             :: readtd
+          integer             :: rr_rst_step
+          integer             :: max_opt_steps
+          double precision    :: vscf_gauswidth
+          double precision    :: csiterfactor
+          double precision    :: ethresh
+          double precision    :: resthresh
+          double precision    :: selcut1
+          double precision    :: selcut2
+          double precision    :: qva_dstep
+          double precision    :: hess_h
+          double precision    :: laserfreq
+          double precision    :: rrint_damp
+          double precision    :: rri_fxyz
+          double precision    :: maxg_thresh
+          double precision    :: rms_thresh
+          character(4)        :: opt_type
 
-          namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,&
-          vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,&
+          namelist /qva/ nhess,vscf_gauswidth,doconfsel,csdepth,csiterfactor,   &
+          vci_qmax1,vci_qmax2,qumvia_qff,qumvia_nmc,vci_qmax3,ethresh,          &
           resthresh,selcut1,selcut2,vci_qmax4,qva_naddref,qva_dstep,qva_extprog,&
-          nmorse,nsinh,hess_h,hess_norder,rraman,laserfreq,rrint_damp,rri_fxyz,&
-          uvvis,lmin,lmax,readtd,rr_rst_step,max_opt_steps,opt_type
+          nmorse,nsinh,hess_h,hess_norder,rraman,laserfreq,rrint_damp,rri_fxyz, &
+          uvvis,lmin,lmax,readtd,rr_rst_step,max_opt_steps,opt_type,            &
+          maxg_thresh, rms_thresh
 
           integer :: ifind, ierr
 
        !  DEFAULT VALUES FOR QUMVIA
-          nhess=0
-          vscf_gauswidth=0.5
-          vci_qmax1=5
-          vci_qmax2=3
-          vci_qmax3=3
-          vci_qmax4=3
-          qva_naddref=0
-          qumvia_qff=2
-          qumvia_nmc=3
-          ethresh=15000
-          resthresh=3000
-          selcut1=1d-6
-          selcut2=1d-6
-          qva_dstep=0.5d0
-          qva_extprog=2
-          doconfsel=1
-          csdepth=2
-          csiterfactor=10d0
-          nmorse=0
-          nsinh=0
-          hess_h=2d-2
-          hess_norder=1
-          rraman=0
-          laserfreq=500d0
-          rrint_damp=0d0
-          rri_fxyz=0.001d0
-          uvvis=0
-          lmin=100
-          lmax=900
-          readtd=0
-          rr_rst_step=-1
-          max_opt_steps=200
-          opt_type='SD'
+          nhess             =0
+          vci_qmax1         =5
+          vci_qmax2         =3
+          vci_qmax3         =3
+          vci_qmax4         =3
+          qva_naddref       =0
+          qumvia_qff        =2
+          qumvia_nmc        =3
+          ethresh           =15000
+          resthresh         =3000
+          vscf_gauswidth    =0.5
+          selcut1           =1d-6
+          selcut2           =1d-6
+          qva_dstep         =0.5d0
+          qva_extprog       =2
+          doconfsel         =1
+          csdepth           =2
+          csiterfactor      =10d0
+          nmorse            =0
+          nsinh             =0
+          hess_h            =2d-2
+          hess_norder       =1
+          rraman            =0
+          laserfreq         =500d0
+          rrint_damp        =0d0
+          rri_fxyz          =0.001d0
+          uvvis             =0
+          lmin              =100
+          lmax              =900
+          readtd            =0
+          rr_rst_step       =-1
+          max_opt_steps     =200
+          opt_type          ='QN'
+          maxg_thresh       =2d-2
+          rms_thresh        =2d-2
 
        !  READ NAMELIST
           open(UNIT=10,FILE=qvain,action='READ',iostat=ierr)
@@ -215,6 +222,8 @@
           qva_nml%rr_rst_step=rr_rst_step
           qva_nml%max_opt_steps=max_opt_steps
           qva_nml%opt_type=opt_type
+          qva_nml%maxg_thresh=maxg_thresh
+          qva_nml%rms_thresh=rms_thresh
 
        end subroutine get_qva_nml
 
@@ -258,6 +267,8 @@
           write(77,'(A,D10.3)') '  hess_h = ',qva_nml%hess_h
           write(77,'(A,D10.3)') '  rrint_damp = ',qva_nml%rrint_damp
           write(77,'(A,D10.3)') '  rri_fxyz = ',qva_nml%rri_fxyz
+          write(77,'(A,D10.3)') '  rms_thresh = ',qva_nml%rms_thresh
+          write(77,'(A,D10.3)') '  maxg_thresh = ',qva_nml%maxg_thresh
           write(77,'(A,A)') ' opt_type = ',qva_nml%opt_type
           write(77,'(A)') ' -------------------------- '
           write(77,*)

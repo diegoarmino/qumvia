@@ -1,7 +1,8 @@
 subroutine optimize(qva_nml,nqmatoms,at_numbers,qmcoords,xopt)
   use qvamod_common, only: qva_nml_type
-  use opt_data_mod, only : dXold_vec, dXnew_vec, Xold_vec, Xnew_vec, Hold, &
-                            lambda, max_opt_steps
+  use opt_data_mod, only : dXold_vec, dXnew_vec, Xold_vec, Xnew_vec, Hold,     &
+                           lambda, stepno, max_opt_steps, Xnew, Xold, dXnew,   &
+                           dXold, escf, eold, nat
   implicit none
 ! -----------------------------------------------------------------------------
   type(qva_nml_type), intent(in)                  :: qva_nml  ! QUMVIA namelist parameters
@@ -10,7 +11,12 @@ subroutine optimize(qva_nml,nqmatoms,at_numbers,qmcoords,xopt)
   double precision,   intent(in)                  :: qmcoords(3,nqmatoms)
   double precision,   intent(out)                 :: xopt(3,nqmatoms)
 ! -----------------------------------------------------------------------------
-
+  logical                                         :: converged
+  integer                                         :: i,j,k
+  integer                                         :: nclatoms
+  double precision                                :: clcoords(4,nqmatoms)
+  double precision                                :: dxyzcl(3,nqmatoms)
+! -----------------------------------------------------------------------------
   include "qvmbia_param.f"
 ! -----------------------------------------------------------------------------
 
@@ -30,7 +36,7 @@ subroutine optimize(qva_nml,nqmatoms,at_numbers,qmcoords,xopt)
     call dft_get_mm_forces(dxyzcl,dXnew)
 
 !   Check optimization convergence
-    call opt_check_convergence(nat,at_numbers,converged)
+    call opt_check_convergence(qva_nml,nat,at_numbers,converged)
 
 !   If converged print optimized geometry and quit.
     if (converged == .TRUE.) then
@@ -47,7 +53,7 @@ subroutine optimize(qva_nml,nqmatoms,at_numbers,qmcoords,xopt)
       case ('SD')
         call steepest_descent()
       case ('CG')
-        call conjugated_gradient()
+        call conjugate_gradient()
       case ('QN')
         call quasi_newton()
       case default
