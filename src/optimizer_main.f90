@@ -17,56 +17,44 @@ subroutine optimize(qva_nml,nqmatoms,at_numbers,qmcoords,xopt)
   max_opt_steps=qva_nml%max_opt_steps
   nat=nqmatoms
 
-  allocate( Xnew(3,nat) )
-  allocate( dXnew(3,nat) )
-
+  call opt_initialize(qva_nml)
   Xnew=qmcoords
-  dX=0d0
-  Xold=0d0
-  select case (qva_nml%opt_type)
-    case ('SD')
-    case ('CG')
-      allocate( vold(3,nat)   )
-    case ('QN')
-      allocate( Xold_vec(3*nat)   )
-      allocate( Xnew_vec(3*nat)   )
-      allocate( dXnew_vec(3*nat)  )
-      allocate( dXold_vec(3*nat)  )
-      allocate( Hold(3*nat,3*nat) )
-    case default
-      allocate( Xold_vec(3*nat)   )
-      allocate( Xnew_vec(3*nat)   )
-      allocate( dXnew_vec(3*nat)  )
-      allocate( dXold_vec(3*nat)  )
-      allocate( Hold(3*nat,3*nat) )
-  end select
 
-   converged = .FALSE.
-   do i=1,max_opt_steps
-!     Single point energy and gradient evaluation.
-      stepno = i
-      call SCF_in(escf,Xnew,clcoords,nclatoms,dXnew)
-      call dft_get_qm_forces(dXnew)
-      call dft_get_mm_forces(dxyzcl,dXnew)
+  converged = .FALSE.
+  do i=1,max_opt_steps
 
-!     Check optimization convergence
-      call opt_check_convergence(nat,at_numbers)
-      if (convergence == .TRUE.) then
-        call print_geom()
-        return
-      end if
+!   Single point energy and gradient evaluation.
+    stepno = i
+    call SCF_in(escf,Xnew,clcoords,nclatoms,dXnew)
+    call dft_get_qm_forces(dXnew)
+    call dft_get_mm_forces(dxyzcl,dXnew)
 
-      select case (qva_nml%opt_type)
+!   Check optimization convergence
+    call opt_check_convergence(nat,at_numbers,converged)
+
+!   If converged print optimized geometry and quit.
+    if (converged == .TRUE.) then
+      write(77,'(A)') "Geometry Converged!"
+      do j=1,nat
+         write(77,'(I3,3D18.8)') at_numbers(j),(Xnew(k,j),k=1,3)
+      end do
+      Xopt = Xnew
+      return
+    end if
+
+!   Select optimization algorithm.
+    select case (qva_nml%opt_type)
       case ('SD')
-        call steepest_descent(nqmatoms,xopt,at_numbers)
+        call steepest_descent()
       case ('CG')
         call conjugated_gradient()
       case ('QN')
         call quasi_newton()
       case default
-        call steepest_descent(nqmatoms,xopt,at_numbers)
-      end select
-   end do
+        call steepest_descent()
+    end select
 
-   return
+  end do
+
+  return
 end subroutine optimize

@@ -1,4 +1,4 @@
-subroutine opt_check_convergence(nat,at_numbers)
+subroutine opt_check_convergence(nat,at_numbers,converged)
    use opt_data_mod, only : dXnew, converged, qva_nml
    use qvamod_common, only: qva_nml_type
    implicit none
@@ -6,6 +6,7 @@ subroutine opt_check_convergence(nat,at_numbers)
 !  -----------------------------------------------------------------------------
    integer,            intent(in)     :: nat
    integer,            intent(in)     :: at_numbers(nat)
+   logical,            intent(inout)  :: converged
 !  -----------------------------------------------------------------------------
    integer                            :: j,k
    integer                            :: igmax
