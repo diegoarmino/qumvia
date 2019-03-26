@@ -168,6 +168,18 @@ write(77,'(A)') ' QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA  QUMVIA
 
       call lio_finalize()
       STOP
+   ELSE IF (qva_nml%nhess .eq. 4) THEN
+
+!     COMPUTE HARMONIC SPECTRA WITH RESONANT RAMAN INTENSITIES.
+      call harmonic_analysis(lio_nml,qva_cli,qva_nml,nqmatoms)
+
+      inquire(unit = 134, opened = is_dip_open)
+      if (is_dip_open) then
+         close(134)
+      end if
+
+      call lio_finalize()
+      STOP
 #endif
 
    END IF

@@ -2949,5 +2949,197 @@ contains
 
       end subroutine
 
+      subroutine harmonic_analysis(lio_nml,qva_cli,qva_nml,nqmatoms)
+!     ------------------------------------------------------------------
+!     COMPUTES NORMAL RAMAN ACTIVITIES USING THE FINITE FIELD METHOD
+!     Method based on the numerical diferentiation of gradients with respect
+!     to the external field.
+!
+!     Following the paper by Komornicki 1978 and later, Backsay, Saebo and
+!     Taylor 1984.
+
+!     Komornicki A, McIver Jr. JW. "An efficeint ab initio method for computing
+!     infrared and Raman intensities: Application to ethylene." J. Chem. Phys.
+!     (1974) 70(04):2014
+!     Backsay GB, Saebo S, Taylor PR, "On the calculation of dipole moment and
+!     polarizability derivatives by the analytical energy gradient method:
+!     Application to the formaldehyde molecule." Chem. Phys. 90 (1984):215.
+!     ------------------------------------------------------------------
+
+!      use garcha_mod
+      implicit none
+
+      type(lio_nml_type), intent(in) :: lio_nml
+      type(qva_nml_type), intent(in) :: qva_nml
+      type(qva_cli_type), intent(in) :: qva_cli
+      integer,intent(in)  :: nqmatoms
+
+      integer,parameter   :: nclatoms=0
+      integer             :: ngaus
+      integer             :: ndf                  ! Number of deg of freedm (3*nqmatoms)
+      integer             :: nvdf                 ! Number of vib degrees of freedom (ndf-6)
+      integer             :: qva_extprog          ! External program gam=1,gaus=2
+      integer             :: qumvia_nmc
+      integer             :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+      double precision    :: poltens(3*nqmatoms-6,2,3,3) ! Array of polarizabilities.
+      double precision    :: Emod                 ! Derivatives of apha vs. nmodes
+      double precision    :: dy                   ! Step size factor dy. Default=0.5d0
+      double precision    :: qvageom(3,nqmatoms)  ! QM atom coordinates
+
+      double precision    :: nmodes(3*nqmatoms,3*nqmatoms) ! mw Hessian eigenvectors.
+      double precision    :: freq(3*nqmatoms)     ! Harmonic frequencies
+      double precision    :: eig(3*nqmatoms)      ! Harmonic force constants.
+      double precision    :: atmass(nqmatoms)     ! Atomic masses
+      double precision    :: L(3*nqmatoms,3*nqmatoms-6)    ! Array of VIBRATIONAL nmodes.
+      double precision    :: hii(3*nqmatoms-6)    ! Harmonic force constants.
+      double precision    :: omega(3*nqmatoms-6)  ! Harmonic frequencies omega(nm)=Sqrt(hii(nm))
+      double precision    :: X0(3,nqmatoms)       ! Initial geometry in cartesian and Angstroms.
+      double precision    :: Xm(3,nqmatoms)       ! Displaced geometry in cartesian and Angstroms.
+      double precision    :: dX(3,nqmatoms)       ! Displacement vector (cart and Angs).
+      double precision    :: dX1(3,nqmatoms)      ! Displacement vector (cart and Angs).
+      double precision    :: dQ(3*nqmatoms-6)     ! dQ(mode) = dy/Sqrt(omega_i) in Atomic units.
+      double precision    :: Mass(3*nqmatoms)     ! Sqrt mass weights matrix.
+      double precision    :: Minv(3*nqmatoms)     ! Inverse sqrt mass weights matrix.
+      double precision    :: escf                 ! Energy computed by SCF_in()
+      double precision    :: dipxyz(3)            ! Dipole moment computed by SCF_in()
+      double precision    :: clcoords(4,nclatoms)
+      double precision    :: fxyz(3,3)
+      double precision    :: ftr,fti
+      double precision    :: rract(lio_nml%ntdstep/2+1,3*nqmatoms-6)  ! should be C^2 m^2/(amu V^2)
+      integer             :: nat
+      integer             :: rrdebug
+      integer             :: an
+      integer             :: i, j, k
+      integer             :: ii, nm, p
+      integer             :: step
+      integer             :: dd(2)
+      integer             :: openstatus,closestatus
+
+      double precision,allocatable      :: dalpha(:,:,:,:) ! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
+
+      character(len=2),dimension(36),parameter :: atsym=(/"H ","He",&
+      & "Li","Be","B ","C ","N ","O ","F ","Ne","Na","Mg","Al","Si",&
+      & "P ","S ","Cl","Ar","K ","Ca","Sc","Ti","V ","Cr","Mn","Fe",&
+      & "Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr"/)
+      real*8,parameter    :: bohr2ang = 0.5291771D00         ! bohr radius
+
+      include "mass_params.f90"
+
+!     Read geometry file.
+      write(77,'(A)') 'READING GEOMETRY'
+      call readgeom(qva_cli,nqmatoms,qvageom,at_numbers)
+
+      ngaus=16
+      ndf=3*nqmatoms
+      nvdf=ndf-6
+
+
+!     COMPUTING HARMONIC ANALYSIS
+!     ------------------------------------------------------------------
+      write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
+      call hessian(qvageom,nqmatoms,qva_nml%hess_h,qva_nml%hess_norder, &
+                       & at_numbers,nmodes,eig)
+      L=nmodes(:,7:ndf)
+      hii=eig(7:ndf)
+
+
+      Emod=qva_nml%rri_fxyz*514.220652d0             ! Convert to V/nm
+
+!     COMPUTE RAMAN ACTIVITIES
+!     ------------------------------------------------------------------
+      write(77,'(A)') 'COMPUTING RAMAN ACTIVITIES'
+
+      call raman_activities(lio_nml,nvdf,Emod,L,hii)
+
+   end subroutine
+
+
+   subroutine raman_activities(lio_nml,ndf,nvdf,nqmatoms,nclatoms,at_numbers,&
+                         &     nmodes,eig,qmcoords,clcoords,hii,L)
+      implicit none
+
+      integer, intent(in) :: ndf                  ! Number of deg of freedm (3*nqmatoms)
+      integer, intent(in) :: nvdf                 ! Number of vib degrees of freedom (ndf-6)
+      integer, intent(in) :: nqmatoms             ! Number of QM atoms
+      integer, intent(in) :: nclatoms             ! Number of classical atoms
+      integer, intent(in) :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+      real*8, intent(in)  :: nmodes(ndf,ndf)      ! mw Hessian eigenvectors.
+      real*8, intent(in)  :: eig(ndf)             ! mw Hessian eigenvalues.
+      real*8, intent(in)  :: dy                   ! Step size factor dy. Default=0.5d0
+      real*8, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      real*8, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
+      real*8, intent(in) :: hii(nvdf)           ! Diagonal cubic coupling terms
+      double precision, intent(in) :: L(ndf,nvdf)
+
+      double precision :: Mass(ndf)
+      double precision :: Minv(ndf)
+      double precision :: gtmp(ndf)
+      double precision :: gnc(nvdf)
+      double precision :: grad0(nvdf)
+      double precision :: dxyzqm(3,nqmatoms)
+      double precision :: dxyzcl(3,nclatoms)
+      double precision :: dipxyz(3)
+
+      include "qvmbia_param.f"
+
+!     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
+      do i=1,nqmatoms
+          do j=1,3
+              k=at_numbers(i)
+              Mass(3*(i-1)+j) = sqrt_atomic_masses_au(k)
+              Minv(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
+          end do
+      end do
+
+
+!     Energy at initial geometry
+      call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+      call dft_get_qm_forces(dxyzqm)
+      call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+!     Mass weight gradient
+      do i=1,nqmatoms
+          do j=1,3
+              gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+          end do
+      end do
+
+!     Convert to normal coordinates.
+      call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
+      grad0=gnc   ! Gradient without electric field.
+
+!-------------------------------------------------------------------------------
+!     COMPUTING DIAGONAL POLARIZABILITY TENSOR ELEMENTS' DERIVATIVES wrt Qi
+!-------------------------------------------------------------------------------
+      sgn=(/1,-1/)
+      emod=qva_nml%rri_fxyz
+
+      do rho=1,3
+      do sigma=rho,3
+      do s=1,2
+         field=(/0d0,0d0,0d0/)  ! Defining electric field
+         field(rho)=field(rho)+sgn(s)*emod
+         field(sigma)=field(sigma)+sgn(s)*emod
+
+   !  Energy at initial geometry
+         call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+         call dft_get_qm_forces(dxyzqm)
+         call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+   !  Mass weight gradient
+         do i=1,nqmatoms
+            do j=1,3
+              gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+           end do
+        end do
+!     Convert to normal coordinates.
+         call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
+         grad_diag(:,rho)=gnc   ! Gradient without electric field.
+      end do
+      end do
+      end do
+
+
+   end subroutine
 
 end module qvamod_lioexcl
