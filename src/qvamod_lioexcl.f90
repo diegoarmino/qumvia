@@ -35,7 +35,7 @@ module qvamod_lioexcl
    implicit none
    private
    public :: fullnumqff,seminumqff,hessian,lio_nml_type,get_lio_nml,&
-           & print_lio_nml, read_coords_lio, rrintensities
+           & print_lio_nml, read_coords_lio, rrintensities, harmonic_analysis
 
 
    type lio_nml_type
@@ -3049,36 +3049,49 @@ contains
 !     ------------------------------------------------------------------
       write(77,'(A)') 'COMPUTING RAMAN ACTIVITIES'
 
-      call raman_activities(lio_nml,nvdf,Emod,L,hii)
+      call raman_activities(lio_nml,qva_nml,ndf,nvdf,nqmatoms,nclatoms,at_numbers,&
+                         &     nmodes,eig,qvageom,clcoords,hii,L,dy)
 
    end subroutine
 
 
-   subroutine raman_activities(lio_nml,ndf,nvdf,nqmatoms,nclatoms,at_numbers,&
-                         &     nmodes,eig,qmcoords,clcoords,hii,L)
+   subroutine raman_activities(lio_nml,qva_nml,ndf,nvdf,nqmatoms,nclatoms,at_numbers,&
+                         &     nmodes,eig,qmcoords,clcoords,hii,L,dy)
+!      use garcha_mod, only:
+      use field_data, only: fx, fy, fz
       implicit none
+
+      type(lio_nml_type), intent(in) :: lio_nml
+      type(qva_nml_type), intent(in) :: qva_nml
 
       integer, intent(in) :: ndf                  ! Number of deg of freedm (3*nqmatoms)
       integer, intent(in) :: nvdf                 ! Number of vib degrees of freedom (ndf-6)
       integer, intent(in) :: nqmatoms             ! Number of QM atoms
       integer, intent(in) :: nclatoms             ! Number of classical atoms
       integer, intent(in) :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
-      real*8, intent(in)  :: nmodes(ndf,ndf)      ! mw Hessian eigenvectors.
-      real*8, intent(in)  :: eig(ndf)             ! mw Hessian eigenvalues.
-      real*8, intent(in)  :: dy                   ! Step size factor dy. Default=0.5d0
-      real*8, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
-      real*8, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
-      real*8, intent(in) :: hii(nvdf)           ! Diagonal cubic coupling terms
-      double precision, intent(in) :: L(ndf,nvdf)
+      double precision, intent(in)  :: nmodes(ndf,ndf)      ! mw Hessian eigenvectors.
+      double precision, intent(in)  :: eig(ndf)             ! mw Hessian eigenvalues.
+      double precision, intent(in)  :: dy                   ! Step size factor dy. Default=0.5d0
+      double precision, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      double precision, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
+      double precision, intent(in)  :: hii(nvdf)           ! Diagonal cubic coupling terms
+      double precision, intent(in)  :: L(ndf,nvdf)
 
+      double precision :: emod,escf,denom
+      double precision :: sgn(2),field(3),stencil(8)
       double precision :: Mass(ndf)
       double precision :: Minv(ndf)
       double precision :: gtmp(ndf)
       double precision :: gnc(nvdf)
+      double precision :: iso(nvdf)
+      double precision :: ani(nvdf)
       double precision :: grad0(nvdf)
       double precision :: dxyzqm(3,nqmatoms)
       double precision :: dxyzcl(3,nclatoms)
       double precision :: dipxyz(3)
+      double precision :: activity(nvdf)
+      double precision :: dalpha(nvdf,3,3)
+      integer          :: i,j,k,s,rho,sigma,nm
 
       include "qvmbia_param.f"
 
@@ -3091,7 +3104,9 @@ contains
           end do
       end do
 
-
+!-------------------------------------------------------------------------------
+!     COMPUTING GRADIENT AT ZERO FIELD AND CONVERTING TO NORMAL COORDINATES.
+!-------------------------------------------------------------------------------
 !     Energy at initial geometry
       call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
       call dft_get_qm_forces(dxyzqm)
@@ -3111,34 +3126,101 @@ contains
 !-------------------------------------------------------------------------------
 !     COMPUTING DIAGONAL POLARIZABILITY TENSOR ELEMENTS' DERIVATIVES wrt Qi
 !-------------------------------------------------------------------------------
-      sgn=(/1,-1/)
+      sgn=(/2d0,-2d0/)
       emod=qva_nml%rri_fxyz
 
+!     Diagonal tensor elements.
+!     -------------------------------------------------------------------------------
+      dalpha=0d0
       do rho=1,3
-      do sigma=rho,3
-      do s=1,2
-         field=(/0d0,0d0,0d0/)  ! Defining electric field
-         field(rho)=field(rho)+sgn(s)*emod
-         field(sigma)=field(sigma)+sgn(s)*emod
+         dalpha(:,rho,rho)=dalpha(:,rho,rho)-2d0*grad0
+         do s=1,2
+            field=(/0d0,0d0,0d0/)  ! Defining electric field
+            field(rho)=field(rho)+sgn(s)*emod
+            Fx=field(1)
+            Fy=field(2)
+            Fz=field(3)
 
-   !  Energy at initial geometry
-         call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
-         call dft_get_qm_forces(dxyzqm)
-         call dft_get_mm_forces(dxyzcl,dxyzqm)
+            call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+            call dft_get_qm_forces(dxyzqm)
+            call dft_get_mm_forces(dxyzcl,dxyzqm)
 
-   !  Mass weight gradient
-         do i=1,nqmatoms
-            do j=1,3
-              gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
-           end do
-        end do
-!     Convert to normal coordinates.
-         call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
-         grad_diag(:,rho)=gnc   ! Gradient without electric field.
-      end do
-      end do
+      !     Mass weight gradient
+            do i=1,nqmatoms
+               do j=1,3
+                 gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+               end do
+            end do
+
+   !        Convert to normal coordinates.
+            call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
+
+!           Accumulating derivatives of alpha
+            dalpha(:,rho,rho)=dalpha(:,rho,rho)+gnc
+         end do
+         dalpha(:,rho,rho)=dalpha(:,rho,rho)/(4d0*Emod**2)
       end do
 
+
+!     Off-diagonal tensor elements.
+!     -------------------------------------------------------------------------------
+      stencil=(/1d0,1d0,1d0,-1d0,-1d0,-1d0,-1d0,1d0/)
+      denom=1d0/(4d0*Emod*Emod)
+      do rho=1,2
+         do sigma=rho+1,3
+            do s=1,4
+               field=(/0d0,0d0,0d0/)
+               field(rho)=field(rho)+stencil(2*s-1)*Emod
+               field(sigma)=field(sigma)+stencil(2*s)*Emod
+               Fx=field(1)
+               Fy=field(2)
+               Fz=field(3)
+
+               call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+               call dft_get_qm_forces(dxyzqm)
+               call dft_get_mm_forces(dxyzcl,dxyzqm)
+
+         !     Mass weight gradient
+               do i=1,nqmatoms
+                  do j=1,3
+                    gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+                  end do
+               end do
+
+      !        Convert to normal coordinates.
+               call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
+
+   !           Accumulating derivatives of alpha
+               dalpha(:,rho,sigma)=dalpha(:,rho,sigma)+(-1d0)**(s)*gnc
+            end do
+            dalpha(:,rho,sigma)=dalpha(:,rho,sigma)*denom
+            dalpha(:,sigma,rho)=dalpha(:,rho,sigma)
+         end do
+      end do
+!-------------------------------------------------------------------------------
+!     RAMAN ACTIVITIES.
+!-------------------------------------------------------------------------------
+      iso(:)=(dalpha(:,1,1)+dalpha(:,2,2)+dalpha(:,3,3))/3d0
+      ani(:)=0.5d0*(                                     &
+      &             (dalpha(:,1,1)-dalpha(:,2,2))**2 +   &
+      &             (dalpha(:,2,2)-dalpha(:,3,3))**2 +   &
+      &             (dalpha(:,3,3)-dalpha(:,1,1))**2 +   &
+      &             6d0*(                                &
+      &                  dalpha(:,1,2)**2+               &
+      &                  dalpha(:,2,3)**2+               &
+      &                  dalpha(:,3,1)**2                &
+      &                  )                               &
+      &             )
+      activity(:)=(45d0*iso(:)**2+7d0*ani(:))/45d0
+
+!-------------------------------------------------------------------------------
+!     PRINTING RESULTS
+!-------------------------------------------------------------------------------
+
+      write(77,'(A)') 'Raman activities'
+      do nm=1,nvdf
+         write(77,'(I3,F15.10)') nm, activity(nm)
+      end do
 
    end subroutine
 

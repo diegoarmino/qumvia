@@ -12,7 +12,7 @@ FC=ifort
 FFLAGS= -O3 -ip -xHost -FR -I${MKL_HOME}/include
 FLIBS= -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -L$(MKL_HOME)
 LIOLIBS=-L/usr/lib -L/usr/lib64 -L$(LIO_HOME)/g2g -lg2g -L$(LIO_HOME)/lioamber -llio-g2g
-LIOFLAGS= -I$(LIO_HOME)/lioamber -I$(LIO_HOME)/lioamber/obj
+LIOFLAGS= -I$(LIO_HOME)/lioamber -I$(LIO_HOME)/lioamber/obj -I/home/diegoa/progs/fftw-3.3.8/api
 
 
 cpu: clean mkdirs qumvia.cpu mvdirs
