@@ -3219,7 +3219,7 @@ contains
 
       write(77,'(A)') 'Raman activities'
       do nm=1,nvdf
-         write(77,'(I3,F15.10)') nm, activity(nm)
+         write(77,'(I3,F15.8)') nm, activity(nm)/(0.529d0**6*0.11456580D-06)*50d0
       end do
 
    end subroutine
