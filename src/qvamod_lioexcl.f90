@@ -3014,6 +3014,7 @@ contains
       integer             :: step
       integer             :: dd(2)
       integer             :: openstatus,closestatus
+      logical             :: debug
 
       double precision,allocatable      :: dalpha(:,:,:,:) ! Derivatives of alpha wrt normal modes [(d alpha(omega)/dQ)].
 
@@ -3036,9 +3037,15 @@ contains
 
 !     COMPUTING HARMONIC ANALYSIS
 !     ------------------------------------------------------------------
+      debug=.TRUE.
       write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
-      call hessian(qvageom,nqmatoms,qva_nml%hess_h,qva_nml%hess_norder, &
+      if (debug==.TRUE.) THEN
+         nmodes=0d0
+         eig=0d0
+      else
+         call hessian(qvageom,nqmatoms,qva_nml%hess_h,qva_nml%hess_norder, &
                        & at_numbers,nmodes,eig)
+      end if
       L=nmodes(:,7:ndf)
       hii=eig(7:ndf)
 
@@ -3092,8 +3099,11 @@ contains
       double precision :: activity(nvdf)
       double precision :: dalpha(nvdf,3,3)
       integer          :: i,j,k,s,rho,sigma,nm
+      logical          :: debug
 
       include "qvmbia_param.f"
+
+      debug=.TRUE.
 
 !     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
       do i=1,nqmatoms
@@ -3108,9 +3118,18 @@ contains
 !     COMPUTING GRADIENT AT ZERO FIELD AND CONVERTING TO NORMAL COORDINATES.
 !-------------------------------------------------------------------------------
 !     Energy at initial geometry
-      call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
-      call dft_get_qm_forces(dxyzqm)
-      call dft_get_mm_forces(dxyzcl,dxyzqm)
+      if (debug==.TRUE.) then
+         write(77,*) '======================================================='
+         write(77,*) 'Optimization, frequency and gradient calculation using '
+         write(77,*) 'gaussian at zero electric field.'
+         write(77,*) '======================================================='
+         call run_gaus_freq(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+      else
+         call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+         call dft_get_qm_forces(dxyzqm)
+         call dft_get_mm_forces(dxyzcl,dxyzqm)
+      end if
+
 
 !     Mass weight gradient
       do i=1,nqmatoms
@@ -3141,9 +3160,14 @@ contains
             Fy=field(2)
             Fz=field(3)
 
-            call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
-            call dft_get_qm_forces(dxyzqm)
-            call dft_get_mm_forces(dxyzcl,dxyzqm)
+            if (debug==.TRUE.) then
+               write(77,*) 'Computing gradients with gaussian at field ', Fx,Fy,Fz
+               call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+            else
+               call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+               call dft_get_qm_forces(dxyzqm)
+               call dft_get_mm_forces(dxyzcl,dxyzqm)
+            end if
 
       !     Mass weight gradient
             do i=1,nqmatoms
@@ -3176,9 +3200,14 @@ contains
                Fy=field(2)
                Fz=field(3)
 
-               call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
-               call dft_get_qm_forces(dxyzqm)
-               call dft_get_mm_forces(dxyzcl,dxyzqm)
+               if (debug==.TRUE.) then
+                  write(77,*) 'Computing gradients with gaussian at field ', Fx,Fy,Fz
+                  call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+               else
+                  call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+                  call dft_get_qm_forces(dxyzqm)
+                  call dft_get_mm_forces(dxyzcl,dxyzqm)
+               end if
 
          !     Mass weight gradient
                do i=1,nqmatoms
@@ -3219,9 +3248,154 @@ contains
 
       write(77,'(A)') 'Raman activities'
       do nm=1,nvdf
-         write(77,'(I3,F15.8)') nm, activity(nm)/(0.529d0**6*0.11456580D-06)*50d0
+         write(77,'(I3,F15.8)') nm, activity(nm)/(0.529d0**6*0.11456580D-06)*50d0*4d0
       end do
 
    end subroutine
+
+   subroutine run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+      implicit none
+
+      integer,          intent(in)  :: nqmatoms, nclatoms
+      integer,          intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+      double precision, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
+!      double precision, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
+      double precision, intent(in)  :: Fx,Fy,Fz
+      double precision, intent(out) :: dxyzqm(3,nqmatoms)
+
+      character (len=4)             :: cfx,cfy,cfz
+      character (len=18)            :: key
+      integer                       :: estat,i,j,ios,exitstat,count
+
+      write(cfx,'(F4.2)') abs(Fx*1d4)
+      write(cfy,'(F4.2)') abs(Fy*1d4)
+      write(cfz,'(F4.2)') abs(Fz*1d4)
+
+      if(Fx<0d0) then
+         cfx='-'//TRIM(cfx)
+      else
+         cfx='+'//TRIM(cfx)
+      end if
+
+      if(Fy<0d0) then
+         cfy='-'//TRIM(cfy)
+      else
+         cfy='+'//TRIM(cfy)
+      end if
+
+      if(Fz<0d0) then
+         cfz='-'//TRIM(cfz)
+      else
+         cfz='+'//TRIM(cfz)
+      end if
+
+      open(unit=123, file="ginput.com", iostat=ios, status="new", action="write")
+      if ( ios /= 0 ) stop "Error opening file "
+
+      write(123,'(A)') '%nprocshared=4'
+      write(123,'(A)') '%mem=4GB'
+      write(123,'(A)') '%chk=ginput.chk'
+      write(123,'(6A)') '# PBEPBE/6-31G* Field=X',cfx,' Field=Y',cfy,'Field=Z',cfz
+      write(123,'(A)') ''
+      write(123,'(A)') 'Title'
+      write(123,'(A)') ''
+      write(123,'(A)') '0 1'
+
+      do i=1,nqmatoms
+         write(123,'(I3,3F16.8)') at_numbers(i),(qmcoords(j,i),j=1,3)
+      end do
+
+      write(123,'(A)') ' '
+      close(123)
+
+      call EXECUTE_COMMAND_LINE('g09 ginput.com', wait=.true.,exitstat=estat)
+      if (exitstat /= 0) stop "Error on Gaussian calculation."
+
+      call EXECUTE_COMMAND_LINE('formchk ginput.chk',wait=.TRUE.,exitstat=estat)
+      if (exitstat /= 0) stop "Error on formchk execution."
+
+      open(unit=234, file="ginput.fchk", iostat=ios, action="read")
+      if ( ios /= 0 ) stop "Error opening fchk file to read."
+
+      read(234,'(A18)') key
+      count=1
+      do while (key /= 'Cartesian Gradient')
+         read(234,'(A18)') key
+         count=count+1
+      end do
+      write(77,*) 'Number of lines skipped in fchk file is = ', count
+      read(234,*) ( ( dxyzqm(j,i),j=1,3 ), i=1,nqmatoms )
+
+      write(77,*) 'Gradient Vector = ', dxyzqm
+      close(234)
+
+   end subroutine
+
+
+   subroutine run_gaus_freq(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+      implicit none
+
+      integer,          intent(in)  :: nqmatoms, nclatoms
+      integer,          intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+      double precision, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
+!      double precision, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
+      double precision, intent(in)  :: Fx,Fy,Fz
+      double precision, intent(out) :: dxyzqm(3,nqmatoms)
+
+      character (len=4)             :: cfx,cfy,cfz
+      character (len=18)            :: key
+      integer                       :: estat,i,j,ios,exitstat,count
+
+      open(unit=123, file="ginput.com", iostat=ios, status="new", action="write")
+      if ( ios /= 0 ) stop "Error opening file "
+
+      write(123,'(A)') '%nprocshared=4'
+      write(123,'(A)') '%mem=4GB'
+      write(123,'(A)') '%chk=ginput.chk'
+      write(123,'(6A)') '# opt=tight freq=saveNormalModes PBEPBE/6-31G* NoSymm'
+      write(123,'(A)') ''
+      write(123,'(A)') 'Title'
+      write(123,'(A)') ''
+      write(123,'(A)') '0 1'
+
+      do i=1,nqmatoms
+         write(123,'(I3,3F16.8)') at_numbers(i),(qmcoords(j,i),j=1,3)
+      end do
+
+      write(123,'(A)') ' '
+      close(123)
+
+      call EXECUTE_COMMAND_LINE('g09 ginput.com', wait=.true.,exitstat=estat)
+      if (exitstat /= 0) stop "Error on Gaussian calculation."
+
+      call EXECUTE_COMMAND_LINE('formchk ginput.chk',wait=.TRUE.,exitstat=estat)
+      if (exitstat /= 0) stop "Error on formchk execution."
+
+      open(unit=234, file="ginput.fchk", iostat=ios, action="read")
+      if ( ios /= 0 ) stop "Error opening fchk file to read."
+
+      read(234,'(A18)') key
+      count=1
+      do while (key /= 'Normal Modes')
+         read(234,'(A18)') key
+         count=count+1
+      end do
+      write(77,*) 'Number of lines skipped in fchk file is = ', count
+      read(234,*) ( ( dxyzqm(j,i),j=1,3 ), i=1,nqmatoms )
+
+      read(234,'(A18)') key
+      count=1
+      do while (key /= 'Cartesian Gradient')
+         read(234,'(A18)') key
+         count=count+1
+      end do
+      write(77,*) 'Number of lines skipped in fchk file is = ', count
+      read(234,*) ( ( dxyzqm(j,i),j=1,3 ), i=1,nqmatoms )
+
+      write(77,*) 'Gradient Vector = ', dxyzqm
+      close(234)
+
+   end subroutine
+
 
 end module qvamod_lioexcl
