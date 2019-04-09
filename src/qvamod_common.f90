@@ -1169,8 +1169,7 @@
  !            READ(15,*)
              READ(15,FMT2) txt1,nm,dsp,nh
              READ(15,*)
-             if (n==0 .AND. nm/=0) STOP('ERROR: THE FIRST HESSIAN READ DOES NOT&
-                                       &CORRESPOND TO THE EQUILIBRIUM GEOMETRY')
+             if (n==0 .AND. nm/=0) STOP('ERROR: THE FIRST HESSIAN IS NOT THE EQUILIBRIUM GEOMETRY')
              DO i=1,ndf
                 DO minc = 1,ndf,5
                    maxc=minc+4
@@ -1296,8 +1295,7 @@
  !           READING HESSIAN FROM FILE
              READ(15,FMT2) txt1,nm,dsp,nh
              if (n==0 .AND. nm/=0) then
-                STOP('ERROR: THE FIRST HESSIAN READ DOES NOT&
-                     &CORRESPOND TO THE EQUILIBRIUM GEOMETRY')
+                STOP('ERROR: FIRST HESSIAN NOT EQUILIBRIUM GEOMETRY')
              end if
              READ(15,FMT1) (phess(j),j=1,ne)
 

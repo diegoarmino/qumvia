@@ -3035,21 +3035,6 @@ contains
       nvdf=ndf-6
 
 
-!     COMPUTING HARMONIC ANALYSIS
-!     ------------------------------------------------------------------
-      debug=.TRUE.
-      write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
-      if (debug==.TRUE.) THEN
-         nmodes=0d0
-         eig=0d0
-      else
-         call hessian(qvageom,nqmatoms,qva_nml%hess_h,qva_nml%hess_norder, &
-                       & at_numbers,nmodes,eig)
-      end if
-      L=nmodes(:,7:ndf)
-      hii=eig(7:ndf)
-
-
       Emod=qva_nml%rri_fxyz*514.220652d0             ! Convert to V/nm
 
 !     COMPUTE RAMAN ACTIVITIES
@@ -3057,13 +3042,13 @@ contains
       write(77,'(A)') 'COMPUTING RAMAN ACTIVITIES'
 
       call raman_activities(lio_nml,qva_nml,ndf,nvdf,nqmatoms,nclatoms,at_numbers,&
-                         &     nmodes,eig,qvageom,clcoords,hii,L,dy)
+                         &     qvageom,clcoords,hii,L,dy)
 
    end subroutine
 
 
    subroutine raman_activities(lio_nml,qva_nml,ndf,nvdf,nqmatoms,nclatoms,at_numbers,&
-                         &     nmodes,eig,qmcoords,clcoords,hii,L,dy)
+                         &     qmcoords,clcoords,hii,L,dy)
 !      use garcha_mod, only:
       use field_data, only: fx, fy, fz
       implicit none
@@ -3076,14 +3061,15 @@ contains
       integer, intent(in) :: nqmatoms             ! Number of QM atoms
       integer, intent(in) :: nclatoms             ! Number of classical atoms
       integer, intent(in) :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
-      double precision, intent(in)  :: nmodes(ndf,ndf)      ! mw Hessian eigenvectors.
-      double precision, intent(in)  :: eig(ndf)             ! mw Hessian eigenvalues.
       double precision, intent(in)  :: dy                   ! Step size factor dy. Default=0.5d0
-      double precision, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      double precision, intent(inout)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
       double precision, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
-      double precision, intent(in)  :: hii(nvdf)           ! Diagonal cubic coupling terms
-      double precision, intent(in)  :: L(ndf,nvdf)
 
+      double precision :: hii(nvdf)           ! Diagonal cubic coupling terms
+      double precision :: L(ndf,nvdf)
+      double precision :: nmodes(ndf,ndf)      ! mw Hessian eigenvectors.
+      double precision :: eig(ndf)             ! Hessian eigenvalues.
+      double precision :: atmass(nqmatoms)
       double precision :: emod,escf,denom
       double precision :: sgn(2),field(3),stencil(8)
       double precision :: Mass(ndf)
@@ -3103,42 +3089,58 @@ contains
 
       include "qvmbia_param.f"
 
+!     COMPUTING HARMONIC ANALYSIS
+!     ------------------------------------------------------------------
       debug=.TRUE.
-
-!     Building mass weights matrix Minv = diag(1/Sqrt(m_i))
-      do i=1,nqmatoms
-          do j=1,3
-              k=at_numbers(i)
-              Mass(3*(i-1)+j) = sqrt_atomic_masses_au(k)
-              Minv(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
-          end do
-      end do
-
-!-------------------------------------------------------------------------------
-!     COMPUTING GRADIENT AT ZERO FIELD AND CONVERTING TO NORMAL COORDINATES.
-!-------------------------------------------------------------------------------
-!     Energy at initial geometry
-      if (debug==.TRUE.) then
+      write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
+      if (debug==.TRUE.) THEN
+         nmodes=0d0
+         eig=0d0
          write(77,*) '======================================================='
          write(77,*) 'Optimization, frequency and gradient calculation using '
          write(77,*) 'gaussian at zero electric field.'
          write(77,*) '======================================================='
-         call run_gaus_freq(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+         call run_gaus_freq(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm)
+         write(77,*) 'GAUSSIAN calculation done!'
+!        Mass weight gradient
+         do i=1,nqmatoms
+             do j=1,3
+                 gtmp(3*(i-1)+j)=dxyzqm(j,i)/sqrt(atmass(i))
+             end do
+         end do
       else
+         call hessian(qmcoords,nqmatoms,qva_nml%hess_h,qva_nml%hess_norder, &
+                       & at_numbers,nmodes,eig)
+
+!        Building mass weights matrix Minv = diag(1/Sqrt(m_i))
+         do i=1,nqmatoms
+             do j=1,3
+                 k=at_numbers(i)
+                 Mass(3*(i-1)+j) = sqrt_atomic_masses_au(k)
+                 Minv(3*(i-1)+j) = invsqrt_atomic_masses_au(k)
+             end do
+         end do
          call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
          call dft_get_qm_forces(dxyzqm)
          call dft_get_mm_forces(dxyzcl,dxyzqm)
+!        Mass weight gradient
+         do i=1,nqmatoms
+             do j=1,3
+                 gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+             end do
+         end do
       end if
 
+      L=nmodes(:,7:ndf)
+      hii=eig(7:ndf)
 
-!     Mass weight gradient
-      do i=1,nqmatoms
-          do j=1,3
-              gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
-          end do
-      end do
+      write(77,*) 'CACAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
-!     Convert to normal coordinates.
+!-------------------------------------------------------------------------------
+!     COMPUTING GRADIENT AT ZERO FIELD AND CONVERTING TO NORMAL COORDINATES.
+!-------------------------------------------------------------------------------
+
+!     Convert Gradient to normal coordinates.
       call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
       grad0=gnc   ! Gradient without electric field.
 
@@ -3163,18 +3165,23 @@ contains
             if (debug==.TRUE.) then
                write(77,*) 'Computing gradients with gaussian at field ', Fx,Fy,Fz
                call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+!              Mass weight gradient
+               do i=1,nqmatoms
+                  do j=1,3
+                    gtmp(3*(i-1)+j)=dxyzqm(j,i)/sqrt(atmass(i))
+                  end do
+               end do
             else
                call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
                call dft_get_qm_forces(dxyzqm)
                call dft_get_mm_forces(dxyzcl,dxyzqm)
-            end if
-
-      !     Mass weight gradient
-            do i=1,nqmatoms
-               do j=1,3
-                 gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+      !        Mass weight gradient
+               do i=1,nqmatoms
+                  do j=1,3
+                    gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+                  end do
                end do
-            end do
+            end if
 
    !        Convert to normal coordinates.
             call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
@@ -3203,18 +3210,24 @@ contains
                if (debug==.TRUE.) then
                   write(77,*) 'Computing gradients with gaussian at field ', Fx,Fy,Fz
                   call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+!                 Mass weight gradient
+                  do i=1,nqmatoms
+                     do j=1,3
+                       gtmp(3*(i-1)+j)=dxyzqm(j,i)/sqrt(atmass(i))
+                     end do
+                  end do
                else
                   call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
                   call dft_get_qm_forces(dxyzqm)
                   call dft_get_mm_forces(dxyzcl,dxyzqm)
+         !        Mass weight gradient
+                  do i=1,nqmatoms
+                     do j=1,3
+                       gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+                     end do
+                  end do
                end if
 
-         !     Mass weight gradient
-               do i=1,nqmatoms
-                  do j=1,3
-                    gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
-                  end do
-               end do
 
       !        Convert to normal coordinates.
                call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
@@ -3332,14 +3345,14 @@ contains
    end subroutine
 
 
-   subroutine run_gaus_freq(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+   subroutine run_gaus_freq(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm)
       implicit none
 
       integer,          intent(in)  :: nqmatoms, nclatoms
       integer,          intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
-      double precision, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
-!      double precision, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
-      double precision, intent(in)  :: Fx,Fy,Fz
+      double precision, intent(out) :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      double precision, intent(out) :: atmass(nqmatoms)
+      double precision, intent(out) :: nmodes(3*nqmatoms,3*nqmatoms)
       double precision, intent(out) :: dxyzqm(3,nqmatoms)
 
       character (len=4)             :: cfx,cfy,cfz
@@ -3371,22 +3384,107 @@ contains
       call EXECUTE_COMMAND_LINE('formchk ginput.chk',wait=.TRUE.,exitstat=estat)
       if (exitstat /= 0) stop "Error on formchk execution."
 
+      call read_gaus_chekpoint(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm)
+
+   end subroutine
+
+   subroutine read_gaus_chekpoint(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm)
+      implicit none
+
+      integer,          intent(in)  :: nqmatoms, nclatoms
+      integer,          intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
+      double precision, intent(out) :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      double precision, intent(out) :: atmass(nqmatoms)
+      double precision, intent(out) :: nmodes(3*nqmatoms,3*nqmatoms)
+      double precision, intent(out) :: dxyzqm(3,nqmatoms)
+
+      double precision              :: orth(3*nqmatoms-6,3*nqmatoms-6)
+      double precision              :: nmt(3*nqmatoms)
+      double precision              :: ndf, nvdf
+      character (len=4)             :: cfx,cfy,cfz
+      character (len=29)            :: keycoords
+      character (len=19)            :: keymass
+      character (len=9)             :: keynmodes
+      character (len=18)            :: keygrad
+      integer                       :: estat,ios,exitstat
+      integer                       :: i,j,k,nm,at,nat,count
+
+!     External functions
+      double precision, external :: dnrm2
+      double precision, external :: ddot
+
+      ndf=3d0*nqmatoms
+      nvdf=ndf-6
+
+!     Opening checkpoint file.
       open(unit=234, file="ginput.fchk", iostat=ios, action="read")
       if ( ios /= 0 ) stop "Error opening fchk file to read."
 
-      read(234,'(A18)') key
+!     Reading Cartesian Coordinates.
+      read(234,'(A18)') keycoords
       count=1
-      do while (key /= 'Normal Modes')
-         read(234,'(A18)') key
+      do while (keycoords /= 'Current cartesian coordinates')
+         read(234,'(A18)') keycoords
          count=count+1
       end do
       write(77,*) 'Number of lines skipped in fchk file is = ', count
-      read(234,*) ( ( dxyzqm(j,i),j=1,3 ), i=1,nqmatoms )
+      read(234,*) ( ( qmcoords(i,j),i=1,3 ), j=1,nqmatoms )
+      rewind 234
 
-      read(234,'(A18)') key
+!     Reading Masses
+      read(234,'(A18)') keymass
       count=1
-      do while (key /= 'Cartesian Gradient')
-         read(234,'(A18)') key
+      do while (keymass /= 'Real atomic weights')
+         read(234,'(A18)') keymass
+         count=count+1
+      end do
+      write(77,*) 'Number of lines skipped in fchk file is = ', count
+      read(234,*) ( atmass(i),i=1,nqmatoms )
+      rewind 234
+
+!     Reading Normal Modes.
+      read(234,'(A18)') keynmodes
+      count=1
+      do while (keynmodes /= 'Vib-Modes')
+         read(234,'(A18)') keynmodes
+         count=count+1
+      end do
+      write(77,*) 'Number of lines skipped in fchk file is = ', count
+      read(234,*) ( ( nmodes(i,j),j=1,ndf ), i=1,nqmatoms )
+
+ !     MASS WEIGHT NORMAL MODES
+       do nm=1,nvdf
+          do at=1,nqmatoms
+             do j=1,3
+                k=j+3*(at-1)
+                nmodes(k,nm) = nmodes(k,nm)*Sqrt(atmass(at))
+             end do
+          end do
+       end do
+
+ !     NORMALIZE MASS-WEIGHTED NORMAL MODES
+       do nm=1,nvdf
+          nmt=nmodes(:,nm)
+!          write(77,'(99D16.8)') nmodes(:,nm)
+!          write(77,'(99D16.8)') nmt
+!          write(77,'(F16.8)') dnrm2(ndf,nmt,1)
+          nmt=nmt/dnrm2(ndf,nmt,1)
+!          write(77,'(99D16.8)') nmt
+!          write(77,'(F16.8)') dnrm2(ndf,nmt,1)
+          nmodes(:,nm)=nmt
+       end do
+
+       call dgemm('T','N',nvdf,nvdf,ndf,1d0,nmodes,ndf,nmodes,ndf,0d0,orth,nvdf)
+       write(77,'(A)') 'DEBUG> Writing normal modes product matrix (should be identity)'
+       do i=1,nvdf
+          write(77,'(99D15.6)') orth(i,:)
+       end do
+
+      rewind 234
+      read(234,'(A18)') keygrad
+      count=1
+      do while (keygrad /= 'Cartesian Gradient')
+         read(234,'(A18)') keygrad
          count=count+1
       end do
       write(77,*) 'Number of lines skipped in fchk file is = ', count
