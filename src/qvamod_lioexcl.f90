@@ -3134,7 +3134,6 @@ contains
       L=nmodes(:,7:ndf)
       hii=eig(7:ndf)
 
-      write(77,*) 'CACAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
 !-------------------------------------------------------------------------------
 !     COMPUTING GRADIENT AT ZERO FIELD AND CONVERTING TO NORMAL COORDINATES.
@@ -3163,7 +3162,7 @@ contains
             Fz=field(3)
 
             if (debug==.TRUE.) then
-               write(77,*) 'Computing gradients with gaussian at field ', Fx,Fy,Fz
+               write(77,'(A,3F8.4)') 'Computing gradients with gaussian at field ', Fx,Fy,Fz
                call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
 !              Mass weight gradient
                do i=1,nqmatoms
@@ -3208,7 +3207,7 @@ contains
                Fz=field(3)
 
                if (debug==.TRUE.) then
-                  write(77,*) 'Computing gradients with gaussian at field ', Fx,Fy,Fz
+                  write(77,'(A,3F8.4)') 'Computing gradients with gaussian at field ', Fx,Fy,Fz
                   call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
 !                 Mass weight gradient
                   do i=1,nqmatoms
@@ -3276,31 +3275,42 @@ contains
       double precision, intent(in)  :: Fx,Fy,Fz
       double precision, intent(out) :: dxyzqm(3,nqmatoms)
 
-      character (len=4)             :: cfx,cfy,cfz
+      character (len=6)             :: cfx,cfy,cfz
       character (len=18)            :: key
       integer                       :: estat,i,j,ios,exitstat,count
 
-      write(cfx,'(F4.2)') abs(Fx*1d4)
-      write(cfy,'(F4.2)') abs(Fy*1d4)
-      write(cfz,'(F4.2)') abs(Fz*1d4)
+      write(cfx,'(I2)') int(abs(Fx*1d3))
+      write(cfy,'(I2)') int(abs(Fy*1d3))
+      write(cfz,'(I2)') int(abs(Fz*1d3))
+
+      write(77,'(I2)') int(abs(Fx*1d3))
+      write(77,'(I2)') int(abs(Fy*1d3))
+      write(77,'(I2)') int(abs(Fz*1d3))
 
       if(Fx<0d0) then
-         cfx='-'//TRIM(cfx)
+         cfx='-'//ADJUSTL(TRIM(cfx))
       else
-         cfx='+'//TRIM(cfx)
+         cfx='+'//ADJUSTL(TRIM(cfx))
       end if
 
       if(Fy<0d0) then
-         cfy='-'//TRIM(cfy)
+         cfy='-'//adjustl(TRIM(cfy))
       else
-         cfy='+'//TRIM(cfy)
+         cfy='+'//ADJUSTL(TRIM(cfy))
       end if
 
       if(Fz<0d0) then
-         cfz='-'//TRIM(cfz)
+         cfz='-'//ADJUSTL(TRIM(cfz))
       else
-         cfz='+'//TRIM(cfz)
+         cfz='+'//ADJUSTL(TRIM(cfz))
       end if
+
+      write(77,'(A)') cfx
+      write(77,'(A)') cfy
+      write(77,'(A)') cfz
+
+      call EXECUTE_COMMAND_LINE('rm -f ginput.*', wait=.true.,exitstat=estat)
+      if (exitstat /= 0) stop "Error deleting previous files"
 
       open(unit=123, file="ginput.com", iostat=ios, status="new", action="write")
       if ( ios /= 0 ) stop "Error opening file "
@@ -3308,7 +3318,7 @@ contains
       write(123,'(A)') '%nprocshared=4'
       write(123,'(A)') '%mem=4GB'
       write(123,'(A)') '%chk=ginput.chk'
-      write(123,'(6A)') '# PBEPBE/6-31G* Field=X',cfx,' Field=Y',cfy,'Field=Z',cfz
+      write(123,'(6A)') '# PBEPBE/6-31G* nosymm Force Field=X',cfx,' Field=Y',cfy,' Field=Z',cfz
       write(123,'(A)') ''
       write(123,'(A)') 'Title'
       write(123,'(A)') ''
@@ -3324,7 +3334,7 @@ contains
       call EXECUTE_COMMAND_LINE('g09 ginput.com', wait=.true.,exitstat=estat)
       if (exitstat /= 0) stop "Error on Gaussian calculation."
 
-      call EXECUTE_COMMAND_LINE('formchk ginput.chk',wait=.TRUE.,exitstat=estat)
+      call EXECUTE_COMMAND_LINE('formchk ginput.chk',wait=.true.,exitstat=estat)
       if (exitstat /= 0) stop "Error on formchk execution."
 
       open(unit=234, file="ginput.fchk", iostat=ios, action="read")
@@ -3359,8 +3369,11 @@ contains
       character (len=18)            :: key
       integer                       :: estat,i,j,ios,exitstat,count
 
+      call EXECUTE_COMMAND_LINE('rm -f ginput.*', wait=.true.,exitstat=estat)
+      if (exitstat /= 0) stop "Error deleting previous files"
+
       open(unit=123, file="ginput.com", iostat=ios, status="new", action="write")
-      if ( ios /= 0 ) stop "Error opening file "
+      if ( ios /= 0 ) stop "Error opening (creating) input file for Gaussian"
 
       write(123,'(A)') '%nprocshared=4'
       write(123,'(A)') '%mem=4GB'
@@ -3381,7 +3394,7 @@ contains
       call EXECUTE_COMMAND_LINE('g09 ginput.com', wait=.true.,exitstat=estat)
       if (exitstat /= 0) stop "Error on Gaussian calculation."
 
-      call EXECUTE_COMMAND_LINE('formchk ginput.chk',wait=.TRUE.,exitstat=estat)
+      call EXECUTE_COMMAND_LINE('formchk ginput.chk',wait=.true.,exitstat=estat)
       if (exitstat /= 0) stop "Error on formchk execution."
 
       call read_gaus_chekpoint(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm)
@@ -3395,25 +3408,30 @@ contains
       integer,          intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
       double precision, intent(out) :: qmcoords(3,nqmatoms) ! QM atom coordinates
       double precision, intent(out) :: atmass(nqmatoms)
-      double precision, intent(out) :: nmodes(3*nqmatoms,3*nqmatoms)
+      double precision, intent(out) :: nmodes(3*nqmatoms,3*nqmatoms-6)
       double precision, intent(out) :: dxyzqm(3,nqmatoms)
 
+      double precision              :: a0
       double precision              :: orth(3*nqmatoms-6,3*nqmatoms-6)
       double precision              :: nmt(3*nqmatoms)
-      double precision              :: ndf, nvdf
       character (len=4)             :: cfx,cfy,cfz
-      character (len=29)            :: keycoords
+      character (len=17)            :: keycoords
       character (len=19)            :: keymass
       character (len=9)             :: keynmodes
       character (len=18)            :: keygrad
       integer                       :: estat,ios,exitstat
-      integer                       :: i,j,k,nm,at,nat,count
+      integer                       :: i,j,k,m,nm,at,nat,count
+      integer                       :: ndf, nvdf
 
+
+      double precision,ALLOCATABLE  :: nmd(:)
 !     External functions
       double precision, external :: dnrm2
       double precision, external :: ddot
 
-      ndf=3d0*nqmatoms
+      A0  =   0.5291771D00         ! bohr radius
+
+      ndf=3*nqmatoms
       nvdf=ndf-6
 
 !     Opening checkpoint file.
@@ -3421,20 +3439,22 @@ contains
       if ( ios /= 0 ) stop "Error opening fchk file to read."
 
 !     Reading Cartesian Coordinates.
-      read(234,'(A18)') keycoords
+      read(234,'(A17)') keycoords
       count=1
-      do while (keycoords /= 'Current cartesian coordinates')
-         read(234,'(A18)') keycoords
+      do while (trim(keycoords) /= 'Current cartesian')
+         read(234,'(A17)') keycoords
          count=count+1
       end do
       write(77,*) 'Number of lines skipped in fchk file is = ', count
       read(234,*) ( ( qmcoords(i,j),i=1,3 ), j=1,nqmatoms )
+      qmcoords=qmcoords*a0
+      write(77,*) qmcoords
       rewind 234
 
 !     Reading Masses
       read(234,'(A18)') keymass
       count=1
-      do while (keymass /= 'Real atomic weights')
+      do while (trim(keymass) /= 'Real atomic weight')
          read(234,'(A18)') keymass
          count=count+1
       end do
@@ -3443,14 +3463,29 @@ contains
       rewind 234
 
 !     Reading Normal Modes.
-      read(234,'(A18)') keynmodes
+      read(234,'(A9)') keynmodes
       count=1
-      do while (keynmodes /= 'Vib-Modes')
-         read(234,'(A18)') keynmodes
+      do while (trim(keynmodes) /= 'Vib-Modes')
+         read(234,'(A9)') keynmodes
          count=count+1
       end do
+
+      allocate(nmd(ndf*nvdf))
+
       write(77,*) 'Number of lines skipped in fchk file is = ', count
-      read(234,*) ( ( nmodes(i,j),j=1,ndf ), i=1,nqmatoms )
+      read(234,*) ( nmd(j),j=1,ndf*nvdf )
+
+      k=1
+      do m=1,nvdf
+         do i=1,ndf
+            nmodes(i,m) = nmd(k)
+            k=k+1
+         end do
+      end do
+
+      write(77,*) nmodes
+
+      deallocate(nmd)
 
  !     MASS WEIGHT NORMAL MODES
        do nm=1,nvdf
@@ -3461,29 +3496,32 @@ contains
              end do
           end do
        end do
+       write(77,*) (sqrt(atmass(at)),at=1,nqmatoms)
 
  !     NORMALIZE MASS-WEIGHTED NORMAL MODES
        do nm=1,nvdf
           nmt=nmodes(:,nm)
 !          write(77,'(99D16.8)') nmodes(:,nm)
-!          write(77,'(99D16.8)') nmt
+          write(77,*) 'Not normal'
+          write(77,'(99D16.8)') nmt
 !          write(77,'(F16.8)') dnrm2(ndf,nmt,1)
           nmt=nmt/dnrm2(ndf,nmt,1)
-!          write(77,'(99D16.8)') nmt
+          write(77,*) 'Yes normal'
+          write(77,'(99D16.8)') nmt
 !          write(77,'(F16.8)') dnrm2(ndf,nmt,1)
           nmodes(:,nm)=nmt
        end do
 
-       call dgemm('T','N',nvdf,nvdf,ndf,1d0,nmodes,ndf,nmodes,ndf,0d0,orth,nvdf)
-       write(77,'(A)') 'DEBUG> Writing normal modes product matrix (should be identity)'
-       do i=1,nvdf
-          write(77,'(99D15.6)') orth(i,:)
-       end do
+!       call dgemm('T','N',nvdf,nvdf,ndf,1d0,nmodes,ndf,nmodes,ndf,0d0,orth,nvdf)
+!       write(77,'(A)') 'DEBUG> Writing normal modes product matrix (should be identity)'
+!       do i=1,nvdf
+!          write(77,'(99F15.6)') orth(i,:)
+!       end do
 
       rewind 234
       read(234,'(A18)') keygrad
       count=1
-      do while (keygrad /= 'Cartesian Gradient')
+      do while (trim(keygrad) /= 'Cartesian Gradient')
          read(234,'(A18)') keygrad
          count=count+1
       end do
