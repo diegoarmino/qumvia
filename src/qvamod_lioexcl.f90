@@ -3067,8 +3067,10 @@ contains
 
       double precision :: hii(nvdf)           ! Diagonal cubic coupling terms
       double precision :: L(ndf,nvdf)
+      double precision :: gnmodes(ndf,nvdf)
       double precision :: nmodes(ndf,ndf)      ! mw Hessian eigenvectors.
       double precision :: eig(ndf)             ! Hessian eigenvalues.
+      double precision :: freq(nvdf)             ! Hessian eigenvalues.
       double precision :: atmass(nqmatoms)
       double precision :: emod,escf,denom
       double precision :: sgn(2),field(3),stencil(8)
@@ -3100,12 +3102,12 @@ contains
          write(77,*) 'Optimization, frequency and gradient calculation using '
          write(77,*) 'gaussian at zero electric field.'
          write(77,*) '======================================================='
-         call run_gaus_freq(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm)
+         call run_gaus_freq(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,gnmodes,dxyzqm,freq)
          write(77,*) 'GAUSSIAN calculation done!'
 !        Mass weight gradient
          do i=1,nqmatoms
              do j=1,3
-                 gtmp(3*(i-1)+j)=dxyzqm(j,i)/sqrt(atmass(i))
+                 gtmp(3*(i-1)+j)=dxyzqm(j,i)!/sqrt(atmass(i))
              end do
          end do
       else
@@ -3124,15 +3126,19 @@ contains
          call dft_get_qm_forces(dxyzqm)
          call dft_get_mm_forces(dxyzcl,dxyzqm)
 !        Mass weight gradient
-         do i=1,nqmatoms
-             do j=1,3
-                 gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
-             end do
-         end do
+!         do i=1,nqmatoms
+!             do j=1,3
+!                 gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+!             end do
+!         end do
       end if
 
-      L=nmodes(:,7:ndf)
-      hii=eig(7:ndf)
+      if (debug==.FALSE.) then
+         L=nmodes(:,7:ndf)
+         hii=eig(7:ndf)
+      else
+         L=gnmodes
+      end if
 
 
 !-------------------------------------------------------------------------------
@@ -3140,8 +3146,21 @@ contains
 !-------------------------------------------------------------------------------
 
 !     Convert Gradient to normal coordinates.
+      do i=1,ndf
+         if (abs(gtmp(i))<1d-10) THEN
+            gtmp(i)=0d0
+         end if
+      end do
+      write(77,*) 'Gradient in cartesians'
+      write(77,*) gtmp
+
+      gtmp=gtmp*1d6
       call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
-      grad0=gnc   ! Gradient without electric field.
+      grad0=gnc*1d-6   ! Gradient without electric field.
+      write(77,*) 'Normal modes L ='
+      write(77,*) L
+      write(77,*) 'Mass-weighted Gradient in normal coordinates with no electric field.'
+      write(77,*) gnc
 
 !-------------------------------------------------------------------------------
 !     COMPUTING DIAGONAL POLARIZABILITY TENSOR ELEMENTS' DERIVATIVES wrt Qi
@@ -3167,7 +3186,7 @@ contains
 !              Mass weight gradient
                do i=1,nqmatoms
                   do j=1,3
-                    gtmp(3*(i-1)+j)=dxyzqm(j,i)/sqrt(atmass(i))
+                    gtmp(3*(i-1)+j)=dxyzqm(j,i)!/sqrt(atmass(i))
                   end do
                end do
             else
@@ -3175,11 +3194,11 @@ contains
                call dft_get_qm_forces(dxyzqm)
                call dft_get_mm_forces(dxyzcl,dxyzqm)
       !        Mass weight gradient
-               do i=1,nqmatoms
-                  do j=1,3
-                    gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
-                  end do
-               end do
+!               do i=1,nqmatoms
+!                  do j=1,3
+!                    gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+!                  end do
+!               end do
             end if
 
    !        Convert to normal coordinates.
@@ -3212,7 +3231,7 @@ contains
 !                 Mass weight gradient
                   do i=1,nqmatoms
                      do j=1,3
-                       gtmp(3*(i-1)+j)=dxyzqm(j,i)/sqrt(atmass(i))
+                       gtmp(3*(i-1)+j)=dxyzqm(j,i)!/sqrt(atmass(i))
                      end do
                   end do
                else
@@ -3220,11 +3239,11 @@ contains
                   call dft_get_qm_forces(dxyzqm)
                   call dft_get_mm_forces(dxyzcl,dxyzqm)
          !        Mass weight gradient
-                  do i=1,nqmatoms
-                     do j=1,3
-                       gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
-                     end do
-                  end do
+!                  do i=1,nqmatoms
+!                     do j=1,3
+!                       gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+!                     end do
+!                  end do
                end if
 
 
@@ -3233,6 +3252,7 @@ contains
 
    !           Accumulating derivatives of alpha
                dalpha(:,rho,sigma)=dalpha(:,rho,sigma)+(-1d0)**(s)*gnc
+               write(77,*) 'carajoooooooooooooooo',s,(-1d0)**(s)
             end do
             dalpha(:,rho,sigma)=dalpha(:,rho,sigma)*denom
             dalpha(:,sigma,rho)=dalpha(:,rho,sigma)
@@ -3260,7 +3280,8 @@ contains
 
       write(77,'(A)') 'Raman activities'
       do nm=1,nvdf
-         write(77,'(I3,F15.8)') nm, activity(nm)/(0.529d0**6*0.11456580D-06)*50d0*4d0
+         !write(77,'(I3,2F15.8)') nm, activity(nm)/(0.529d0**6*0.11456580D-06)*50d0*4d0,freq(nm)
+         write(77,'(I3,2D15.8)') nm, activity(nm),freq(nm)
       end do
 
    end subroutine
@@ -3355,15 +3376,16 @@ contains
    end subroutine
 
 
-   subroutine run_gaus_freq(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm)
+   subroutine run_gaus_freq(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm,freq)
       implicit none
 
       integer,          intent(in)  :: nqmatoms, nclatoms
       integer,          intent(in)  :: at_numbers(nqmatoms) ! Atomic numbers of QM atoms.
-      double precision, intent(out) :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      double precision, intent(inout) :: qmcoords(3,nqmatoms) ! QM atom coordinates
       double precision, intent(out) :: atmass(nqmatoms)
-      double precision, intent(out) :: nmodes(3*nqmatoms,3*nqmatoms)
+      double precision, intent(out) :: nmodes(3*nqmatoms,3*nqmatoms-6)
       double precision, intent(out) :: dxyzqm(3,nqmatoms)
+      double precision, intent(out) :: freq(3*nqmatoms-6)
 
       character (len=4)             :: cfx,cfy,cfz
       character (len=18)            :: key
@@ -3378,7 +3400,7 @@ contains
       write(123,'(A)') '%nprocshared=4'
       write(123,'(A)') '%mem=4GB'
       write(123,'(A)') '%chk=ginput.chk'
-      write(123,'(6A)') '# opt=tight freq=saveNormalModes PBEPBE/6-31G* NoSymm'
+      write(123,'(6A)') '# opt=tight freq=(saveNormalModes,raman) PBEPBE/6-31G* NoSymm'
       write(123,'(A)') ''
       write(123,'(A)') 'Title'
       write(123,'(A)') ''
@@ -3397,11 +3419,16 @@ contains
       call EXECUTE_COMMAND_LINE('formchk ginput.chk',wait=.true.,exitstat=estat)
       if (exitstat /= 0) stop "Error on formchk execution."
 
-      call read_gaus_chekpoint(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm)
+      call read_gaus_chekpoint(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm,freq)
+
+      call EXECUTE_COMMAND_LINE('mv -f ginput.com freq.com', wait=.true.,exitstat=estat)
+      call EXECUTE_COMMAND_LINE('mv -f ginput.fchk freq.fchk', wait=.true.,exitstat=estat)
+      call EXECUTE_COMMAND_LINE('mv -f ginput.log freq.log', wait=.true.,exitstat=estat)
+      if (exitstat /= 0) stop "Error deleting previous files"
 
    end subroutine
 
-   subroutine read_gaus_chekpoint(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm)
+   subroutine read_gaus_chekpoint(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,nmodes,dxyzqm,freq)
       implicit none
 
       integer,          intent(in)  :: nqmatoms, nclatoms
@@ -3410,6 +3437,7 @@ contains
       double precision, intent(out) :: atmass(nqmatoms)
       double precision, intent(out) :: nmodes(3*nqmatoms,3*nqmatoms-6)
       double precision, intent(out) :: dxyzqm(3,nqmatoms)
+      double precision, intent(out) :: freq(3*nqmatoms-6)
 
       double precision              :: a0
       double precision              :: orth(3*nqmatoms-6,3*nqmatoms-6)
@@ -3419,6 +3447,7 @@ contains
       character (len=19)            :: keymass
       character (len=9)             :: keynmodes
       character (len=18)            :: keygrad
+      character (len=6)             :: keyfreq
       integer                       :: estat,ios,exitstat
       integer                       :: i,j,k,m,nm,at,nat,count
       integer                       :: ndf, nvdf
@@ -3483,7 +3512,10 @@ contains
          end do
       end do
 
-      write(77,*) nmodes
+      do nm=1,nvdf
+         write(77,*)
+         write(77,*) nmodes(:,nm)
+      end do
 
       deallocate(nmd)
 
@@ -3512,11 +3544,11 @@ contains
           nmodes(:,nm)=nmt
        end do
 
-!       call dgemm('T','N',nvdf,nvdf,ndf,1d0,nmodes,ndf,nmodes,ndf,0d0,orth,nvdf)
-!       write(77,'(A)') 'DEBUG> Writing normal modes product matrix (should be identity)'
-!       do i=1,nvdf
-!          write(77,'(99F15.6)') orth(i,:)
-!       end do
+       call dgemm('T','N',nvdf,nvdf,ndf,1d0,nmodes,ndf,nmodes,ndf,0d0,orth,nvdf)
+       write(77,'(A)') 'DEBUG> Writing normal modes product matrix (should be identity)'
+       do i=1,nvdf
+          write(77,'(99F15.6)') orth(i,:)
+       end do
 
       rewind 234
       read(234,'(A18)') keygrad
@@ -3528,7 +3560,20 @@ contains
       write(77,*) 'Number of lines skipped in fchk file is = ', count
       read(234,*) ( ( dxyzqm(j,i),j=1,3 ), i=1,nqmatoms )
 
-      write(77,*) 'Gradient Vector = ', dxyzqm
+      write(77,*) 'Gradient Vector = \n', dxyzqm
+
+      rewind 234
+      read(234,'(A6)') keyfreq
+      count=1
+      do while (trim(keyfreq) /= 'Vib-E2')
+         read(234,'(A6)') keyfreq
+         count=count+1
+      end do
+      write(77,*) 'Number of lines skipped in fchk file is = ', count
+      read(234,*) ( freq(j),j=1,nvdf )
+
+      write(77,*) 'Frequencies= ', freq
+
       close(234)
 
    end subroutine
