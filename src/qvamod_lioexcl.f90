@@ -3079,6 +3079,7 @@ contains
       double precision :: gtmp(ndf)
       double precision :: gnc(nvdf)
       double precision :: iso(nvdf)
+      double precision :: isodebug(nvdf)
       double precision :: ani(nvdf)
       double precision :: grad0(nvdf)
       double precision :: dxyzqm(3,nqmatoms)
@@ -3086,14 +3087,18 @@ contains
       double precision :: dipxyz(3)
       double precision :: activity(nvdf)
       double precision :: dalpha(nvdf,3,3)
+      double precision :: sign_eig(3*nqmatoms)
       integer          :: i,j,k,s,rho,sigma,nm
       logical          :: debug
+      double precision, PARAMETER :: freq2cm=5141.1182009496200901D0 ! Convert freq to cm-1
+
 
       include "qvmbia_param.f"
 
 !     COMPUTING HARMONIC ANALYSIS
 !     ------------------------------------------------------------------
-      debug=.TRUE.
+!      debug=.TRUE.
+      debug=.FALSE.
       write(77,'(A)') 'BEGINNING HARMONIC ANALYSIS'
       if (debug==.TRUE.) THEN
          nmodes=0d0
@@ -3107,7 +3112,7 @@ contains
 !        Mass weight gradient
          do i=1,nqmatoms
              do j=1,3
-                 gtmp(3*(i-1)+j)=dxyzqm(j,i)!/sqrt(atmass(i))
+                 gtmp(3*(i-1)+j)=dxyzqm(j,i)/sqrt(atmass(i))
              end do
          end do
       else
@@ -3126,18 +3131,25 @@ contains
          call dft_get_qm_forces(dxyzqm)
          call dft_get_mm_forces(dxyzcl,dxyzqm)
 !        Mass weight gradient
-!         do i=1,nqmatoms
-!             do j=1,3
-!                 gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
-!             end do
-!         end do
+         do i=1,nqmatoms
+             do j=1,3
+                 gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+             end do
+         end do
       end if
 
       if (debug==.FALSE.) then
          L=nmodes(:,7:ndf)
          hii=eig(7:ndf)
+         sign_eig=1.0d0
+         eig=eig*AMU_TO_AU
+!        Convert frequecies to wavenumbers
+         do i = 1,nvdf
+            freq(i) = sign(sign_eig(6+i),eig(6+i))*freq2cm*sqrt(abs(eig(6+i)))
+         ENDDO
       else
          L=gnmodes
+         hii=freq
       end if
 
 
@@ -3145,7 +3157,7 @@ contains
 !     COMPUTING GRADIENT AT ZERO FIELD AND CONVERTING TO NORMAL COORDINATES.
 !-------------------------------------------------------------------------------
 
-!     Convert Gradient to normal coordinates.
+!     Gradient is considered zero if less than 10d-10
       do i=1,ndf
          if (abs(gtmp(i))<1d-10) THEN
             gtmp(i)=0d0
@@ -3154,13 +3166,14 @@ contains
       write(77,*) 'Gradient in cartesians'
       write(77,*) gtmp
 
+!     Convert Gradient to normal coordinates.
       gtmp=gtmp*1d6
       call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
       grad0=gnc*1d-6   ! Gradient without electric field.
       write(77,*) 'Normal modes L ='
       write(77,*) L
       write(77,*) 'Mass-weighted Gradient in normal coordinates with no electric field.'
-      write(77,*) gnc
+      write(77,*) grad0
 
 !-------------------------------------------------------------------------------
 !     COMPUTING DIAGONAL POLARIZABILITY TENSOR ELEMENTS' DERIVATIVES wrt Qi
@@ -3186,7 +3199,7 @@ contains
 !              Mass weight gradient
                do i=1,nqmatoms
                   do j=1,3
-                    gtmp(3*(i-1)+j)=dxyzqm(j,i)!/sqrt(atmass(i))
+                    gtmp(3*(i-1)+j)=dxyzqm(j,i)/sqrt(atmass(i))
                   end do
                end do
             else
@@ -3194,20 +3207,24 @@ contains
                call dft_get_qm_forces(dxyzqm)
                call dft_get_mm_forces(dxyzcl,dxyzqm)
       !        Mass weight gradient
-!               do i=1,nqmatoms
-!                  do j=1,3
-!                    gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
-!                  end do
-!               end do
+               do i=1,nqmatoms
+                  do j=1,3
+                    gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+                  end do
+               end do
             end if
 
-   !        Convert to normal coordinates.
+!           Convert Gradient to normal coordinates.
+            gtmp=gtmp*1d6
             call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
+            gnc=gnc*1d-6   ! Gradient without electric field.
+            write(77,*) 'Mass-weighted Gradient in normal coordinates in field'
+            write(77,*) gnc
 
 !           Accumulating derivatives of alpha
             dalpha(:,rho,rho)=dalpha(:,rho,rho)+gnc
          end do
-         dalpha(:,rho,rho)=dalpha(:,rho,rho)/(4d0*Emod**2)
+         dalpha(:,rho,rho)=dalpha(:,rho,rho)/(4d0*Emod*Emod)
       end do
 
 
@@ -3231,7 +3248,7 @@ contains
 !                 Mass weight gradient
                   do i=1,nqmatoms
                      do j=1,3
-                       gtmp(3*(i-1)+j)=dxyzqm(j,i)!/sqrt(atmass(i))
+                       gtmp(3*(i-1)+j)=dxyzqm(j,i)/sqrt(atmass(i))
                      end do
                   end do
                else
@@ -3239,20 +3256,25 @@ contains
                   call dft_get_qm_forces(dxyzqm)
                   call dft_get_mm_forces(dxyzcl,dxyzqm)
          !        Mass weight gradient
-!                  do i=1,nqmatoms
-!                     do j=1,3
-!                       gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
-!                     end do
-!                  end do
+                  do i=1,nqmatoms
+                     do j=1,3
+                       gtmp(3*(i-1)+j)=Minv(3*(i-1)+j)*dxyzqm(j,i)
+                     end do
+                  end do
                end if
 
 
       !        Convert to normal coordinates.
+               gtmp=gtmp*1d6
                call dgemv('T',ndf,nvdf,1d0,L,ndf,gtmp,1,0d0,gnc,1)
+               gnc=gnc*1d-6   ! Gradient without electric field.
+
+               write(77,*) 'Mass-weighted Gradient in normal coordinates in field'
+               write(77,*) gnc
 
    !           Accumulating derivatives of alpha
-               dalpha(:,rho,sigma)=dalpha(:,rho,sigma)+(-1d0)**(s)*gnc
-               write(77,*) 'carajoooooooooooooooo',s,(-1d0)**(s)
+               dalpha(:,rho,sigma)=dalpha(:,rho,sigma)+(-1d0)**(s+1)*gnc
+               write(77,*) 'carajoooooooooooooooo',s,(-1d0)**(s+1)
             end do
             dalpha(:,rho,sigma)=dalpha(:,rho,sigma)*denom
             dalpha(:,sigma,rho)=dalpha(:,rho,sigma)
@@ -3281,7 +3303,7 @@ contains
       write(77,'(A)') 'Raman activities'
       do nm=1,nvdf
          !write(77,'(I3,2F15.8)') nm, activity(nm)/(0.529d0**6*0.11456580D-06)*50d0*4d0,freq(nm)
-         write(77,'(I3,2D15.8)') nm, activity(nm),freq(nm)
+         write(77,'(I3,2F15.8)') nm, activity(nm),freq(nm)
       end do
 
    end subroutine
@@ -3300,13 +3322,13 @@ contains
       character (len=18)            :: key
       integer                       :: estat,i,j,ios,exitstat,count
 
-      write(cfx,'(I2)') int(abs(Fx*1d3))
-      write(cfy,'(I2)') int(abs(Fy*1d3))
-      write(cfz,'(I2)') int(abs(Fz*1d3))
+      write(cfx,'(I3)') int(abs(Fx*1d3))
+      write(cfy,'(I3)') int(abs(Fy*1d3))
+      write(cfz,'(I3)') int(abs(Fz*1d3))
 
-      write(77,'(I2)') int(abs(Fx*1d3))
-      write(77,'(I2)') int(abs(Fy*1d3))
-      write(77,'(I2)') int(abs(Fz*1d3))
+      write(77,'(I3)') int(abs(Fx*1d3))
+      write(77,'(I3)') int(abs(Fy*1d3))
+      write(77,'(I3)') int(abs(Fz*1d3))
 
       if(Fx<0d0) then
          cfx='-'//ADJUSTL(TRIM(cfx))
@@ -3339,7 +3361,7 @@ contains
       write(123,'(A)') '%nprocshared=4'
       write(123,'(A)') '%mem=4GB'
       write(123,'(A)') '%chk=ginput.chk'
-      write(123,'(6A)') '# PBEPBE/6-31G* nosymm Force Field=X',cfx,' Field=Y',cfy,' Field=Z',cfz
+      write(123,'(6A)') '# PBEPBE/6-31G* NoSymm Force Guess=NoSymm Field=X',cfx,' Field=Y',cfy,' Field=Z',cfz
       write(123,'(A)') ''
       write(123,'(A)') 'Title'
       write(123,'(A)') ''
@@ -3370,7 +3392,17 @@ contains
       write(77,*) 'Number of lines skipped in fchk file is = ', count
       read(234,*) ( ( dxyzqm(j,i),j=1,3 ), i=1,nqmatoms )
 
-      write(77,*) 'Gradient Vector = ', dxyzqm
+!     Gradient is considered zero if less than 10d-10
+      do i=1,nqmatoms
+      do j=1,3
+         if (abs(dxyzqm(j,i))<1d-10) THEN
+            dxyzqm(j,i)=0d0
+         end if
+      end do
+      end do
+
+      write(77,*) 'Gradient Vector = '
+      write(77,*)  dxyzqm
       close(234)
 
    end subroutine
