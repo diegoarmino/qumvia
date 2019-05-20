@@ -913,7 +913,7 @@ contains
       grad=0.0D0
 
 !     Calculating energy and gradient at the initial geometry.
- !     PRINT THE GEOMETRY JUST READ
+!     PRINT THE GEOMETRY JUST READ
        write(77,'(A)') 'INPUT GEOMETRY'
        write(77,'(A)') '-----------------------------------------------------------------'
        do i=1,nqmatoms
@@ -922,9 +922,8 @@ contains
        write(77,'(A)') '-----------------------------------------------------------------'
        write(77,*)
 
-      call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
-      call dft_get_qm_forces(dxyzqm)
-      call dft_get_mm_forces(dxyzcl,dxyzqm)
+      qmxyz=qmcoords
+      call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
 
       do i=1,nqmatoms
          do j=1,3
@@ -951,10 +950,7 @@ contains
 !           --------------------
             qmxyz=qmcoords
             qmxyz(j,i)=qmcoords(j,i)+h/sqrt(at_masses(k))
-            call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
-            call dft_get_qm_forces(dxyzqm)
-            call dft_get_mm_forces(dxyzcl,dxyzqm)
-
+            call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
 
             do r=1,nqmatoms
              do s=1,3
@@ -966,9 +962,7 @@ contains
 !           ---------------------
             qmxyz=qmcoords
             qmxyz(j,i)=qmcoords(j,i)-h/sqrt(at_masses(k))
-            call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
-            call dft_get_qm_forces(dxyzqm)
-            call dft_get_mm_forces(dxyzcl,dxyzqm)
+            call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
 
             do r=1,nqmatoms
              do s=1,3
@@ -982,9 +976,7 @@ contains
 !              -----------------------
                qmxyz=qmcoords
                qmxyz(j,i)=qmcoords(j,i)+2d0*h/sqrt(at_masses(k))
-               call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
-               call dft_get_qm_forces(dxyzqm)
-               call dft_get_mm_forces(dxyzcl,dxyzqm)
+               call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
                do r=1,nqmatoms
                 do s=1,3
                   grad(k,2,3*(r-1)+s)=dxyzqm(s,r)
@@ -995,9 +987,7 @@ contains
 !              ------------------------
                qmxyz=qmcoords
                qmxyz(j,i)=qmcoords(j,i)-2d0*h/sqrt(at_masses(k))
-               call SCF_in(escf,qmxyz,clcoords,nclatoms,dipxyz)
-               call dft_get_qm_forces(dxyzqm)
-               call dft_get_mm_forces(dxyzcl,dxyzqm)
+               call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
                do r=1,nqmatoms
                 do s=1,3
                   grad(k,-2,3*(r-1)+s)=dxyzqm(s,r)
@@ -3195,7 +3185,7 @@ contains
 
             if (debug==.TRUE.) then
                write(77,'(A,3F8.4)') 'Computing gradients with gaussian at field ', Fx,Fy,Fz
-               call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+               call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm,.TRUE.)
 !              Mass weight gradient
                do i=1,nqmatoms
                   do j=1,3
@@ -3244,7 +3234,7 @@ contains
 
                if (debug==.TRUE.) then
                   write(77,'(A,3F8.4)') 'Computing gradients with gaussian at field ', Fx,Fy,Fz
-                  call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+                  call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm,.TRUE.)
 !                 Mass weight gradient
                   do i=1,nqmatoms
                      do j=1,3
@@ -3308,7 +3298,7 @@ contains
 
    end subroutine
 
-   subroutine run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm)
+   subroutine run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm,dofields)
       implicit none
 
       integer,          intent(in)  :: nqmatoms, nclatoms
@@ -3317,40 +3307,43 @@ contains
 !      double precision, intent(in)  :: clcoords(4,nclatoms) ! MM atom coordinates and charges in au
       double precision, intent(in)  :: Fx,Fy,Fz
       double precision, intent(out) :: dxyzqm(3,nqmatoms)
+      logical,          intent(in)  :: dofields
 
       character (len=6)             :: cfx,cfy,cfz
       character (len=18)            :: key
       integer                       :: estat,i,j,ios,exitstat,count
 
-      write(cfx,'(I3)') int(abs(Fx*1d3))
-      write(cfy,'(I3)') int(abs(Fy*1d3))
-      write(cfz,'(I3)') int(abs(Fz*1d3))
+      if (dofields==.TRUE.) then
+         write(cfx,'(I3)') int(abs(Fx*1d3))
+         write(cfy,'(I3)') int(abs(Fy*1d3))
+         write(cfz,'(I3)') int(abs(Fz*1d3))
 
-      write(77,'(I3)') int(abs(Fx*1d3))
-      write(77,'(I3)') int(abs(Fy*1d3))
-      write(77,'(I3)') int(abs(Fz*1d3))
+         write(77,'(I3)') int(abs(Fx*1d3))
+         write(77,'(I3)') int(abs(Fy*1d3))
+         write(77,'(I3)') int(abs(Fz*1d3))
 
-      if(Fx<0d0) then
-         cfx='-'//ADJUSTL(TRIM(cfx))
-      else
-         cfx='+'//ADJUSTL(TRIM(cfx))
+         if(Fx<0d0) then
+            cfx='-'//ADJUSTL(TRIM(cfx))
+         else
+            cfx='+'//ADJUSTL(TRIM(cfx))
+         end if
+
+         if(Fy<0d0) then
+            cfy='-'//adjustl(TRIM(cfy))
+         else
+            cfy='+'//ADJUSTL(TRIM(cfy))
+         end if
+
+         if(Fz<0d0) then
+            cfz='-'//ADJUSTL(TRIM(cfz))
+         else
+            cfz='+'//ADJUSTL(TRIM(cfz))
+         end if
+
+         write(77,'(A)') cfx
+         write(77,'(A)') cfy
+         write(77,'(A)') cfz
       end if
-
-      if(Fy<0d0) then
-         cfy='-'//adjustl(TRIM(cfy))
-      else
-         cfy='+'//ADJUSTL(TRIM(cfy))
-      end if
-
-      if(Fz<0d0) then
-         cfz='-'//ADJUSTL(TRIM(cfz))
-      else
-         cfz='+'//ADJUSTL(TRIM(cfz))
-      end if
-
-      write(77,'(A)') cfx
-      write(77,'(A)') cfy
-      write(77,'(A)') cfz
 
       call EXECUTE_COMMAND_LINE('rm -f ginput.*', wait=.true.,exitstat=estat)
       if (exitstat /= 0) stop "Error deleting previous files"
@@ -3361,7 +3354,11 @@ contains
       write(123,'(A)') '%nprocshared=4'
       write(123,'(A)') '%mem=4GB'
       write(123,'(A)') '%chk=ginput.chk'
-      write(123,'(6A)') '# PBEPBE/6-31G* NoSymm Force Guess=NoSymm Field=X',cfx,' Field=Y',cfy,' Field=Z',cfz
+      if (dofields==.TRUE.) then
+         write(123,'(6A)') '# PBEPBE/6-31G* NoSymm Force Guess=NoSymm Field=X',cfx,' Field=Y',cfy,' Field=Z',cfz
+      else
+         write(123,'(6A)') '# PBEPBE/6-31G* NoSymm Force Guess=NoSymm'
+      end if
       write(123,'(A)') ''
       write(123,'(A)') 'Title'
       write(123,'(A)') ''
@@ -3607,6 +3604,38 @@ contains
       write(77,*) 'Frequencies= ', freq
 
       close(234)
+
+   end subroutine
+
+   subroutine get_gradients(qmcoords,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
+      implicit none
+
+      integer,          intent(in)  :: nqmatoms
+      integer,          intent(in)  :: nclatoms
+      integer,          intent(in)  :: at_numbers(nqmatoms)
+      double precision, intent(in)  :: qmcoords(3,nqmatoms) ! QM atom coordinates
+      double precision, intent(in)  :: clcoords(4,nclatoms) ! CL atom coordinates
+      double precision, intent(out) :: dxyzqm(3,nqmatoms)
+      double precision, intent(out) :: dxyzcl(3,nqmatoms)
+
+      double precision, intent(out) :: dipxyz(3)
+      double precision, intent(out) :: escf
+
+      integer                       :: ext_program
+      double precision              :: Fx,Fy,Fz
+
+      ext_program=2
+
+      if (ext_program==1) then
+         call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
+         call dft_get_qm_forces(dxyzqm)
+         call dft_get_mm_forces(dxyzcl,dxyzqm)
+      else if (ext_program==2) then
+         Fx=0d0
+         Fy=0d0
+         Fz=0d0
+         call run_gaus(qmcoords,nqmatoms,nclatoms,Fx,Fy,Fz,at_numbers,dxyzqm,.FALSE.)
+      end if
 
    end subroutine
 
