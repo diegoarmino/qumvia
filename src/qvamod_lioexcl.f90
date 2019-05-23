@@ -925,6 +925,9 @@ contains
       qmxyz=qmcoords
       call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
 
+      write(77,*) 'Gradient at minimum '
+      write(77,*) dxyzqm
+
       do i=1,nqmatoms
          do j=1,3
             grad0(3*(i-1)+j)=dxyzqm(j,i)
@@ -952,6 +955,9 @@ contains
             qmxyz(j,i)=qmcoords(j,i)+h/sqrt(at_masses(k))
             call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
 
+            write(77,*) 'Gradient at minimum '
+            write(77,*) dxyzqm
+
             do r=1,nqmatoms
              do s=1,3
                grad(k,1,3*(r-1)+s)=dxyzqm(s,r)
@@ -963,6 +969,9 @@ contains
             qmxyz=qmcoords
             qmxyz(j,i)=qmcoords(j,i)-h/sqrt(at_masses(k))
             call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
+
+            write(77,*) 'Gradient at minimum '
+            write(77,*) dxyzqm
 
             do r=1,nqmatoms
              do s=1,3
@@ -977,6 +986,10 @@ contains
                qmxyz=qmcoords
                qmxyz(j,i)=qmcoords(j,i)+2d0*h/sqrt(at_masses(k))
                call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
+
+               write(77,*) 'Gradient at minimum '
+               write(77,*) dxyzqm
+
                do r=1,nqmatoms
                 do s=1,3
                   grad(k,2,3*(r-1)+s)=dxyzqm(s,r)
@@ -988,6 +1001,10 @@ contains
                qmxyz=qmcoords
                qmxyz(j,i)=qmcoords(j,i)-2d0*h/sqrt(at_masses(k))
                call get_gradients(qmxyz,clcoords,nqmatoms,nclatoms,at_numbers,dxyzqm,dxyzcl,dipxyz,escf)
+
+               write(77,*) 'Gradient at minimum '
+               write(77,*) dxyzqm
+
                do r=1,nqmatoms
                 do s=1,3
                   grad(k,-2,3*(r-1)+s)=dxyzqm(s,r)
@@ -3106,6 +3123,14 @@ contains
              end do
          end do
       else
+         !----------------------------------------------------------------------
+         ! DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+
+            call run_gaus_freq(nqmatoms,nclatoms,at_numbers,qmcoords,atmass,gnmodes,dxyzqm,freq)
+            write(77,*) 'GAUSSIAN calculation done!'
+
+         ! DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+         !----------------------------------------------------------------------
          call hessian(qmcoords,nqmatoms,qva_nml%hess_h,qva_nml%hess_norder, &
                        & at_numbers,nmodes,eig)
 
@@ -3624,12 +3649,13 @@ contains
       integer                       :: ext_program
       double precision              :: Fx,Fy,Fz
 
-      ext_program=2
+      ext_program=1
 
+      dxyzcl=0d0
       if (ext_program==1) then
          call SCF_in(escf,qmcoords,clcoords,nclatoms,dipxyz)
          call dft_get_qm_forces(dxyzqm)
-         call dft_get_mm_forces(dxyzcl,dxyzqm)
+         !call dft_get_mm_forces(dxyzcl,dxyzqm)
       else if (ext_program==2) then
          Fx=0d0
          Fy=0d0
